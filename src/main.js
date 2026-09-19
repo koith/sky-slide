@@ -42,7 +42,7 @@ function updateSpray(dt){for(const q of sprayPool){if(q.life<=0)continue;q.life-
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 function reset(){s=checkpoint;v=26;theta=omega=input=holdTime=0;dead=false;fail.style.display='none'}
-$('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('pointerdown',x=>{x.preventDefault();input=val;holdTime=0});['pointerup','pointercancel','pointerleave'].forEach(n=>e.addEventListener(n,()=>{if(input===val){input=0;holdTime=0}}))}bind('#l',-1);bind('#r',1);
+$('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('contextmenu',x=>x.preventDefault());e.addEventListener('selectstart',x=>x.preventDefault());e.addEventListener('pointerdown',x=>{x.preventDefault();e.setPointerCapture?.(x.pointerId);input=val;holdTime=0});['pointerup','pointercancel','lostpointercapture'].forEach(n=>e.addEventListener(n,x=>{x.preventDefault?.();if(input===val){input=0;holdTime=0}}))}bind('#l',-1);bind('#r',1);
 function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw)).normalize()} function right(f){return new THREE.Vector3(Math.cos(f.yaw),0,Math.sin(f.yaw)).normalize()}
 function worldPos(f,th){return f.p.clone().addScaledVector(right(f),R*Math.sin(th)).add(new THREE.Vector3(0,R*(1-Math.cos(th))+.42,0))}
 function tick(now){
@@ -75,11 +75,11 @@ function tick(now){
     // Rider-anchored chase camera: keep the player at a stable screen position while the world/camera works around them.
     const camTarget=p.clone().addScaledVector(normal,.35).addScaledVector(t,1.15);
     const desiredCam=p.clone().addScaledVector(t,-5.15).addScaledVector(normal,2.35);
-    const camFollow=1-Math.exp(-12*dt);
-    camera.position.lerp(desiredCam,camFollow);
+    // Hard distance lock prevents accumulated follow lag at high speed: rider apparent size stays constant.
+    camera.position.copy(desiredCam);
     const ahead=frameAt(Math.min(total-3,s+72)).p;
     const lookTarget=camTarget.clone().addScaledVector(normal,-.62).lerp(ahead,.18);
-    camera.up.lerp(normal,.16).normalize();
+    camera.up.copy(normal);
     camera.lookAt(lookTarget);
     prog.textContent=Math.min(100,Math.floor(s/total*100))+'%';
     if(Math.abs(theta)>=lip||s>=total-4){
