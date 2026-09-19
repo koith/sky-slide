@@ -1,0 +1,15 @@
+import * as THREE from 'three';
+const app=document.querySelector('#app'), prog=document.querySelector('#progress'), fail=document.querySelector('#fail');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x79c9f2); scene.fog=new THREE.Fog(0x79c9f2,90,500);
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,1400);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight); app.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x42637d,2.2));
+const pts=[]; for(let i=0;i<=320;i++){const z=-i*4, x=Math.sin(i*.032)*42+Math.sin(i*.085)*12, y=130-i*.42+Math.sin(i*.07)*18;pts.push(new THREE.Vector3(x,y,z));}
+const curve=new THREE.CatmullRomCurve3(pts); const track=new THREE.Mesh(new THREE.TubeGeometry(curve,900,2.35,12,false,0,Math.PI),new THREE.MeshStandardMaterial({color:0x39aee8,roughness:.42,side:THREE.DoubleSide})); scene.add(track);
+for(let i=0;i<150;i++){const s=i/150,p=curve.getPointAt(s),t=curve.getTangentAt(s),ring=new THREE.Mesh(new THREE.TorusGeometry(2.38,.13,6,20),new THREE.MeshBasicMaterial({color:i%2?0xffffff:0x87e4ff}));ring.position.copy(p);ring.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),t);scene.add(ring)}
+const rider=new THREE.Group(); const body=new THREE.Mesh(new THREE.CapsuleGeometry(.34,1.05,4,8),new THREE.MeshStandardMaterial({color:0xff6b63})); body.rotation.x=Math.PI/2;rider.add(body);const head=new THREE.Mesh(new THREE.SphereGeometry(.32,12,8),new THREE.MeshStandardMaterial({color:0xffc6a5}));head.position.z=-.9;rider.add(head);scene.add(rider);
+let s=.002,lateral=0,input=0,dead=false,last=performance.now();
+function reset(){s=.002;lateral=0;input=0;dead=false;fail.style.display='none'} document.querySelector('#retry').onclick=reset;
+function bind(id,v){const e=document.querySelector(id);e.onpointerdown=x=>{x.preventDefault();input=v}; for(const n of ['pointerup','pointercancel','pointerleave'])e.addEventListener(n,()=>{if(input===v)input=0})} bind('#l',-1);bind('#r',1);
+function tick(now){const dt=Math.min(.033,(now-last)/1000);last=now;if(!dead){s+=dt*.035;lateral+=input*dt*3.4;lateral*=Math.pow(.35,dt);const p=curve.getPointAt(Math.min(s,1)),t=curve.getTangentAt(Math.min(s,1)).normalize(),right=new THREE.Vector3().crossVectors(t,new THREE.Vector3(0,1,0)).normalize();rider.position.copy(p).addScaledVector(right,lateral);rider.position.y+=.55;rider.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,-1),t);camera.position.copy(p).addScaledVector(t,-7).add(new THREE.Vector3(0,3.6,0));camera.lookAt(curve.getPointAt(Math.min(1,s+.025)));prog.textContent=Math.min(100,Math.floor(s*100))+'%';if(Math.abs(lateral)>2.45||s>=1){dead=true;fail.style.display='grid'}}renderer.render(scene,camera);requestAnimationFrame(tick)}requestAnimationFrame(tick);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
