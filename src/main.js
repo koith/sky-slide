@@ -26,6 +26,19 @@ function jointedLimb(x,z,upperLen,lowerLen,rad,mat,upperList,lowerList){
 jointedLimb(-.42,-.42,.38,.36,.10,skin,arms,forearms); jointedLimb(.42,-.42,.38,.36,.10,skin,arms,forearms);
 jointedLimb(-.23,.55,.42,.42,.13,suit,legs,shins); jointedLimb(.23,.55,.42,.42,.13,suit,legs,shins);
 scene.add(rider);
+// Water spray: pooled translucent droplets emitted behind the rider while in contact with the slide.
+const sprayGeo=new THREE.SphereGeometry(.075,5,4), sprayMat=new THREE.MeshBasicMaterial({color:0xe8fbff,transparent:true,opacity:.72,depthWrite:false});
+const sprayPool=[]; for(let i=0;i<48;i++){const m=new THREE.Mesh(sprayGeo,sprayMat.clone());m.visible=false;scene.add(m);sprayPool.push({m,life:0,vel:new THREE.Vector3()})}
+let sprayCursor=0, sprayAcc=0;
+function emitSpray(p,t,rr,normal,speed,dt){
+  sprayAcc+=dt*(10+speed*.55);
+  while(sprayAcc>=1){sprayAcc-=1;const q=sprayPool[sprayCursor++%sprayPool.length];q.life=.28+Math.random()*.24;q.m.visible=true;
+    q.m.position.copy(p).addScaledVector(t,-.55).addScaledVector(rr,(Math.random()-.5)*.65).addScaledVector(normal,.08);
+    q.vel.copy(t).multiplyScalar(-1.5-Math.random()*2.2).addScaledVector(rr,(Math.random()-.5)*(2.2+speed*.025)).addScaledVector(normal,1.1+Math.random()*2.4);
+    const z=.55+Math.min(1,speed/55)*.75;q.m.scale.setScalar(z*(.65+Math.random()*.7));
+  }
+}
+function updateSpray(dt){for(const q of sprayPool){if(q.life<=0)continue;q.life-=dt;if(q.life<=0){q.m.visible=false;continue}q.vel.y-=5.5*dt;q.m.position.addScaledVector(q.vel,dt);q.m.material.opacity=Math.max(0,q.life*1.8)}}
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 function reset(){s=checkpoint;v=26;theta=omega=input=holdTime=0;dead=false;fail.style.display='none'}
@@ -58,6 +71,7 @@ function tick(now){
     const p=worldPos(f,theta),t=tangent(f),rr=right(f);
     const normal=rr.clone().multiplyScalar(-Math.sin(theta)).add(new THREE.Vector3(0,Math.cos(theta),0)).normalize();
     rider.position.copy(p); rider.up.copy(normal); rider.lookAt(p.clone().add(t));
+    emitSpray(p,t,rr,normal,v,dt);
     // Rider-anchored chase camera: keep the player at a stable screen position while the world/camera works around them.
     const camTarget=p.clone().addScaledVector(normal,.35).addScaledVector(t,1.15);
     const desiredCam=p.clone().addScaledVector(t,-5.15).addScaledVector(normal,2.35);
@@ -75,6 +89,7 @@ function tick(now){
   } else {
     rider.position.addScaledVector(airVel,dt); airVel.y-=9.81*dt; camera.lookAt(rider.position);
   }
+  updateSpray(dt);
   renderer.render(scene,camera); requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
