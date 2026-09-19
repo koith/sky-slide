@@ -41,6 +41,7 @@ function emitSpray(p,t,rr,normal,speed,dt){
 function updateSpray(dt){for(const q of sprayPool){if(q.life<=0)continue;q.life-=dt;if(q.life<=0){q.m.visible=false;continue}q.vel.y-=5.5*dt;q.m.position.addScaledVector(q.vel,dt);q.m.material.opacity=Math.max(0,q.life*1.8)}}
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
+const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
 function reset(){s=checkpoint;v=26;theta=omega=input=holdTime=0;dead=false;fail.style.display='none'}
 $('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('contextmenu',x=>x.preventDefault());e.addEventListener('selectstart',x=>x.preventDefault());e.addEventListener('pointerdown',x=>{x.preventDefault();e.setPointerCapture?.(x.pointerId);input=val;holdTime=0});['pointerup','pointercancel','lostpointercapture'].forEach(n=>e.addEventListener(n,x=>{x.preventDefault?.();if(input===val){input=0;holdTime=0}}))}bind('#l',-1);bind('#r',1);
 function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw)).normalize()} function right(f){return new THREE.Vector3(Math.cos(f.yaw),0,Math.sin(f.yaw)).normalize()}
@@ -72,29 +73,38 @@ function tick(now){
     const normal=rr.clone().multiplyScalar(-Math.sin(theta)).add(new THREE.Vector3(0,Math.cos(theta),0)).normalize();
     rider.position.copy(p); rider.up.copy(normal); rider.lookAt(p.clone().add(t));
     emitSpray(p,t,rr,normal,v,dt);
-    // Reference-style contextual camera: rider remains the anchor, but shot language changes with course shape.
-    const absK=Math.abs(f.k), steepDown=THREE.MathUtils.clamp((-f.g-.18)/.37,0,1), uphill=THREE.MathUtils.clamp((f.g+.02)/.20,0,1), turn=THREE.MathUtils.clamp(absK/.009,0,1);
+    // Look-ahead camera state machine: anticipate upcoming course shape, then blend shot parameters.
+    const fNear=frameAt(Math.min(total-3,s+28)), fFar=frameAt(Math.min(total-3,s+65));
+    const futureK=Math.abs(fNear.k)>.003?fNear.k:fFar.k;
+    const turn=THREE.MathUtils.clamp(Math.max(Math.abs(f.k),Math.abs(fNear.k),Math.abs(fFar.k))/.009,0,1);
+    const steepDown=THREE.MathUtils.clamp((Math.max(-f.g,-fNear.g,-fFar.g)-.18)/.37,0,1);
+    const uphill=THREE.MathUtils.clamp((Math.max(f.g,fNear.g,fFar.g)-.02)/.20,0,1);
+    const crest=THREE.MathUtils.clamp((fNear.g-fFar.g+.08)/.32,0,1)*THREE.MathUtils.clamp((fNear.g+.03)/.18,0,1);
+    let targetBack=5.15,targetHeight=2.35,targetSide=0,targetLook=72,targetMix=.18;
+    if(steepDown>.08){targetBack+=1.25*steepDown;targetHeight+=1.55*steepDown;targetLook+=38*steepDown;targetMix+=.09*steepDown}
+    if(uphill>.08){targetBack-=.55*uphill;targetHeight-=.62*uphill;targetLook-=20*uphill;targetMix-=.045*uphill}
+    if(crest>.08){targetBack-=.28*crest;targetHeight+=1.0*crest;targetLook-=24*crest;targetMix-=.04*crest}
+    if(turn>.08){targetSide=-Math.sign(futureK||f.k)*2.05*turn;targetBack+=.42*turn;targetHeight+=.28*turn;targetLook+=16*turn;targetMix+=.055*turn}
+    const blend=1-Math.exp(-3.8*dt);
+    camState.back=THREE.MathUtils.lerp(camState.back,targetBack,blend);camState.height=THREE.MathUtils.lerp(camState.height,targetHeight,blend);
+    camState.side=THREE.MathUtils.lerp(camState.side,targetSide,blend);camState.lookAhead=THREE.MathUtils.lerp(camState.lookAhead,targetLook,blend);camState.aheadMix=THREE.MathUtils.lerp(camState.aheadMix,targetMix,blend);
     const camTarget=p.clone().addScaledVector(normal,.34).addScaledVector(t,1.0);
-    let back=5.15, height=2.35, side=0, lookAhead=72, aheadMix=.18;
-    // Drops: rise and pull back to reveal the fall and destination below.
-    back+=steepDown*1.05; height+=steepDown*1.35; lookAhead+=steepDown*32; aheadMix+=steepDown*.08;
-    // Climbs/crests: lower the camera and shorten look-ahead so the crest feels larger.
-    back-=uphill*.45; height-=uphill*.48; lookAhead-=uphill*18; aheadMix-=uphill*.04;
-    // Curves: orbit toward the outside, exposing the bend instead of staring straight down the tangent.
-    side+=(-Math.sign(f.k))*turn*1.75; back+=turn*.35; height+=turn*.22; lookAhead+=turn*12; aheadMix+=turn*.05;
-    const desiredCam=p.clone().addScaledVector(t,-back).addScaledVector(normal,height).addScaledVector(rr,side);
+    const desiredCam=p.clone().addScaledVector(t,-camState.back).addScaledVector(normal,camState.height).addScaledVector(rr,camState.side);
     camera.position.copy(desiredCam);
-    const ahead=frameAt(Math.min(total-3,s+lookAhead)).p;
-    const lookTarget=camTarget.clone().addScaledVector(normal,-.58).lerp(ahead,THREE.MathUtils.clamp(aheadMix,.12,.34));
-    camera.up.copy(normal);
-    camera.lookAt(lookTarget);
+    const ahead=frameAt(Math.min(total-3,s+camState.lookAhead)).p;
+    const lookTarget=camTarget.clone().addScaledVector(normal,-.58).lerp(ahead,THREE.MathUtils.clamp(camState.aheadMix,.11,.35));
+    camera.up.copy(normal); camera.lookAt(lookTarget);
     prog.textContent=Math.min(100,Math.floor(s/total*100))+'%';
     if(Math.abs(theta)>=lip||s>=total-4){
       dead=true; airVel.copy(t).multiplyScalar(v).addScaledVector(rr,omega*R).addScaledVector(normal,3);
       setTimeout(()=>{if(dead)fail.style.display='grid'},2000);
     }
   } else {
-    rider.position.addScaledVector(airVel,dt); airVel.y-=9.81*dt; camera.lookAt(rider.position);
+    rider.position.addScaledVector(airVel,dt); airVel.y-=9.81*dt;
+    // Airborne shot: detach from slide framing and orbit slightly above/behind the falling rider.
+    const fallDir=airVel.clone(); if(fallDir.lengthSq()<.01) fallDir.set(0,-1,0); fallDir.normalize();
+    const fallCam=rider.position.clone().addScaledVector(fallDir,-5.8).add(new THREE.Vector3(0,2.3,0));
+    camera.position.lerp(fallCam,1-Math.exp(-5.5*dt)); camera.up.set(0,1,0); camera.lookAt(rider.position);
   }
   updateSpray(dt);
   renderer.render(scene,camera); requestAnimationFrame(tick);
