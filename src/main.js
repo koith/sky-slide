@@ -58,8 +58,15 @@ function tick(now){
     const p=worldPos(f,theta),t=tangent(f),rr=right(f);
     const normal=rr.clone().multiplyScalar(-Math.sin(theta)).add(new THREE.Vector3(0,Math.cos(theta),0)).normalize();
     rider.position.copy(p); rider.up.copy(normal); rider.lookAt(p.clone().add(t));
-    camera.position.copy(p).addScaledVector(t,-7.6).addScaledVector(normal,3.5);
-    camera.lookAt(frameAt(Math.min(total-3,s+95)).p);
+    // Rider-anchored chase camera: keep the player at a stable screen position while the world/camera works around them.
+    const camTarget=p.clone().addScaledVector(normal,.35).addScaledVector(t,1.15);
+    const desiredCam=p.clone().addScaledVector(t,-8.2).addScaledVector(normal,3.15);
+    const camFollow=1-Math.exp(-12*dt);
+    camera.position.lerp(desiredCam,camFollow);
+    const ahead=frameAt(Math.min(total-3,s+72)).p;
+    const lookTarget=camTarget.clone().lerp(ahead,.28);
+    camera.up.lerp(normal,.16).normalize();
+    camera.lookAt(lookTarget);
     prog.textContent=Math.min(100,Math.floor(s/total*100))+'%';
     if(Math.abs(theta)>=lip||s>=total-4){
       dead=true; airVel.copy(t).multiplyScalar(v).addScaledVector(rr,omega*R).addScaledVector(normal,3);
