@@ -13,7 +13,13 @@ for(let i=0;i<samples.length;i++){const f=samples[i],right=new THREE.Vector3(Mat
 for(let i=0;i<samples.length-1;i++)for(let j=0;j<cols-1;j++){let a=i*cols+j,b=a+1,c=a+cols,d=c+1;idx.push(a,c,b,b,c,d)}
 const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.setIndex(idx);geo.computeVertexNormals();scene.add(new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.32,metalness:.03,side:THREE.DoubleSide})));
 const rider=new THREE.Group(), skin=new THREE.MeshStandardMaterial({color:0xffc3a1}), suit=new THREE.MeshStandardMaterial({color:0xff594d});
-const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.34,1.0,5,9),suit);torso.rotation.x=Math.PI/2;rider.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.31,14,10),skin);head.position.z=-.9;rider.add(head);for(const x of [-.23,.23]){let leg=new THREE.Mesh(new THREE.CapsuleGeometry(.13,.72,4,7),suit);leg.rotation.x=Math.PI/2;leg.position.set(x,.02,.85);rider.add(leg)}scene.add(rider);
+const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.34,1.0,5,9),suit);torso.rotation.x=Math.PI/2;rider.add(torso);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.31,14,10),skin);head.position.z=-.9;rider.add(head);
+const arms=[],legs=[];
+function limb(x,z,len,rad,mat){const pivot=new THREE.Group();pivot.position.set(x,.02,z);const mesh=new THREE.Mesh(new THREE.CapsuleGeometry(rad,len,4,7),mat);mesh.rotation.x=Math.PI/2;mesh.position.z=len*.5;pivot.add(mesh);rider.add(pivot);return pivot}
+arms.push(limb(-.42,-.42,.68,.10,skin),limb(.42,-.42,.68,.10,skin));
+legs.push(limb(-.23,.55,.78,.13,suit),limb(.23,.55,.78,.13,suit));
+scene.add(rider);
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 function reset(){s=checkpoint;v=26;theta=omega=input=holdTime=0;dead=false;fail.style.display='none'}
@@ -22,6 +28,11 @@ function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw
 function worldPos(f,th){return f.p.clone().addScaledVector(right(f),R*Math.sin(th)).add(new THREE.Vector3(0,R*(1-Math.cos(th))+.42,0))}
 function tick(now){
   const dt=Math.min(.03,(now-last)/1000); last=now;
+  const flap=now*.009;
+  arms[0].rotation.y=.35*Math.sin(flap); arms[1].rotation.y=-.35*Math.sin(flap+.7);
+  arms[0].rotation.z=.18*Math.sin(flap*1.31); arms[1].rotation.z=-.18*Math.sin(flap*1.31+.5);
+  legs[0].rotation.y=.22*Math.sin(flap*1.17+1.2); legs[1].rotation.y=-.22*Math.sin(flap*1.17+.2);
+  legs[0].rotation.z=.12*Math.sin(flap*.91); legs[1].rotation.z=-.12*Math.sin(flap*.91+.8);
   if(!dead){
     let f=frameAt(s);
     v+=(-9.81*f.g+4.6-.055*v)*dt; v=THREE.MathUtils.clamp(v,15,70); s+=v*dt;
