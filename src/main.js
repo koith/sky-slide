@@ -126,7 +126,7 @@ function tick(now){
     camera.position.lerp(fallCam,1-Math.exp(-5.5*dt)); camera.up.set(0,1,0); camera.lookAt(rider.position);
   }
   updateSpray(dt); updateBlocks(dt);
-  renderer.render(scene,camera); reset(); requestAnimationFrame(tick);
+  renderer.render(scene,camera); requestAnimationFrame(tick);
 }
-requestAnimationFrame(tick);
+reset(); requestAnimationFrame(tick);
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
