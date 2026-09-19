@@ -52,8 +52,9 @@ function updateBlocks(dt){for(const b of blocks){if(!b.active)continue;b.vel.y-=
 }}
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
+const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=checkpoint;v=26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;fail.style.display='none';for(const b of blocks){b.active=false;b.hit=false;b.vel.set(0,0,0);b.spin.set(0,0,0)}}
+function reset(){s=TEST_STAGE2?total-150:checkpoint;v=TEST_STAGE2?42:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;fail.style.display='none';for(const b of blocks){b.active=false;b.hit=false;b.vel.set(0,0,0);b.spin.set(0,0,0)}}
 function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;launchVel.copy(t).multiplyScalar(Math.max(38,v*.92)).addScaledVector(rr,omega*R*2.4);launchVel.y+=10;rider.position.copy(p).addScaledVector(t,1.2);prog.textContent='DESTROY · 0';}
 $('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('contextmenu',x=>x.preventDefault());e.addEventListener('selectstart',x=>x.preventDefault());e.addEventListener('pointerdown',x=>{x.preventDefault();e.setPointerCapture?.(x.pointerId);input=val;holdTime=0});['pointerup','pointercancel','lostpointercapture'].forEach(n=>e.addEventListener(n,x=>{x.preventDefault?.();if(input===val){input=0;holdTime=0}}))}bind('#l',-1);bind('#r',1);
 function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw)).normalize()} function right(f){return new THREE.Vector3(Math.cos(f.yaw),0,Math.sin(f.yaw)).normalize()}
@@ -125,7 +126,7 @@ function tick(now){
     camera.position.lerp(fallCam,1-Math.exp(-5.5*dt)); camera.up.set(0,1,0); camera.lookAt(rider.position);
   }
   updateSpray(dt); updateBlocks(dt);
-  renderer.render(scene,camera); requestAnimationFrame(tick);
+  renderer.render(scene,camera); reset(); requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
