@@ -8,7 +8,7 @@ const seg=[{L:150,k:0,g:-.16},{L:180,k:.0055,g:-.30},{L:120,k:0,g:-.48},{L:190,k
 const samples=[]; let pos=new THREE.Vector3(0,260,0),yaw=0,S=0; const ds=2;
 for(const q of seg){for(let d=0;d<q.L;d+=ds){samples.push({s:S,p:pos.clone(),yaw,k:q.k,g:q.g});yaw+=q.k*ds;pos.add(new THREE.Vector3(Math.sin(yaw)*ds,q.g*ds,-Math.cos(yaw)*ds));S+=ds}} const total=S;
 const frameAt=s=>{let i=Math.max(0,Math.min(samples.length-2,Math.floor(s/ds))),a=samples[i],b=samples[i+1],u=(s-a.s)/ds;return {p:a.p.clone().lerp(b.p,u),yaw:THREE.MathUtils.lerp(a.yaw,b.yaw,u),k:THREE.MathUtils.lerp(a.k,b.k,u),g:THREE.MathUtils.lerp(a.g,b.g,u)}};
-const R=2.15, lip=1.12, cols=11, verts=[],idx=[],colors=[], palette=[new THREE.Color(0x16a9e6),new THREE.Color(0x84ddf7),new THREE.Color(0xf5fbff)];
+const R=1.72, lip=1.12, cols=11, verts=[],idx=[],colors=[], palette=[new THREE.Color(0x16a9e6),new THREE.Color(0x84ddf7),new THREE.Color(0xf5fbff)];
 for(let i=0;i<samples.length;i++){const f=samples[i],right=new THREE.Vector3(Math.cos(f.yaw),0,Math.sin(f.yaw)),c=palette[Math.floor(f.s/22)%palette.length];for(let j=0;j<cols;j++){let th=-lip+(2*lip*j/(cols-1));let p=f.p.clone().addScaledVector(right,R*Math.sin(th));p.y+=R*(1-Math.cos(th));verts.push(p.x,p.y,p.z);colors.push(c.r,c.g,c.b)}}
 for(let i=0;i<samples.length-1;i++)for(let j=0;j<cols-1;j++){let a=i*cols+j,b=a+1,c=a+cols,d=c+1;idx.push(a,c,b,b,c,d)}
 const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.setIndex(idx);geo.computeVertexNormals();scene.add(new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.32,metalness:.03,side:THREE.DoubleSide})));
@@ -60,11 +60,11 @@ function tick(now){
     rider.position.copy(p); rider.up.copy(normal); rider.lookAt(p.clone().add(t));
     // Rider-anchored chase camera: keep the player at a stable screen position while the world/camera works around them.
     const camTarget=p.clone().addScaledVector(normal,.35).addScaledVector(t,1.15);
-    const desiredCam=p.clone().addScaledVector(t,-5.8).addScaledVector(normal,2.55);
+    const desiredCam=p.clone().addScaledVector(t,-5.15).addScaledVector(normal,2.35);
     const camFollow=1-Math.exp(-12*dt);
     camera.position.lerp(desiredCam,camFollow);
     const ahead=frameAt(Math.min(total-3,s+72)).p;
-    const lookTarget=camTarget.clone().addScaledVector(normal,-.95).lerp(ahead,.20);
+    const lookTarget=camTarget.clone().addScaledVector(normal,-.62).lerp(ahead,.18);
     camera.up.lerp(normal,.16).normalize();
     camera.lookAt(lookTarget);
     prog.textContent=Math.min(100,Math.floor(s/total*100))+'%';
