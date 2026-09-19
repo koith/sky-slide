@@ -60,11 +60,11 @@ function tick(now){
     rider.position.copy(p); rider.up.copy(normal); rider.lookAt(p.clone().add(t));
     // Rider-anchored chase camera: keep the player at a stable screen position while the world/camera works around them.
     const camTarget=p.clone().addScaledVector(normal,.35).addScaledVector(t,1.15);
-    const desiredCam=p.clone().addScaledVector(t,-8.2).addScaledVector(normal,3.15);
+    const desiredCam=p.clone().addScaledVector(t,-5.8).addScaledVector(normal,2.55);
     const camFollow=1-Math.exp(-12*dt);
     camera.position.lerp(desiredCam,camFollow);
     const ahead=frameAt(Math.min(total-3,s+72)).p;
-    const lookTarget=camTarget.clone().lerp(ahead,.28);
+    const lookTarget=camTarget.clone().addScaledVector(normal,-.95).lerp(ahead,.20);
     camera.up.lerp(normal,.16).normalize();
     camera.lookAt(lookTarget);
     prog.textContent=Math.min(100,Math.floor(s/total*100))+'%';
