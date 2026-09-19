@@ -15,9 +15,9 @@ const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float
 const rider=new THREE.Group(), skin=new THREE.MeshStandardMaterial({color:0xffc3a1}), suit=new THREE.MeshStandardMaterial({color:0xff594d});
 const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.34,1.0,5,9),suit);torso.rotation.x=Math.PI/2;rider.add(torso);const head=new THREE.Mesh(new THREE.SphereGeometry(.31,14,10),skin);head.position.z=-.9;rider.add(head);for(const x of [-.23,.23]){let leg=new THREE.Mesh(new THREE.CapsuleGeometry(.13,.72,4,7),suit);leg.rotation.x=Math.PI/2;leg.position.set(x,.02,.85);rider.add(leg)}scene.add(rider);
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
-let s=4,v=26,theta=0,omega=0,input=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
-function reset(){s=checkpoint;v=26;theta=omega=input=0;dead=false;fail.style.display='none'}
-$('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('pointerdown',x=>{x.preventDefault();input=val});['pointerup','pointercancel','pointerleave'].forEach(n=>e.addEventListener(n,()=>{if(input===val)input=0}))}bind('#l',-1);bind('#r',1);
+let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
+function reset(){s=checkpoint;v=26;theta=omega=input=holdTime=0;dead=false;fail.style.display='none'}
+$('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('pointerdown',x=>{x.preventDefault();input=val;holdTime=0});['pointerup','pointercancel','pointerleave'].forEach(n=>e.addEventListener(n,()=>{if(input===val){input=0;holdTime=0}}))}bind('#l',-1);bind('#r',1);
 function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw)).normalize()} function right(f){return new THREE.Vector3(Math.cos(f.yaw),0,Math.sin(f.yaw)).normalize()}
 function worldPos(f,th){return f.p.clone().addScaledVector(right(f),R*Math.sin(th)).add(new THREE.Vector3(0,R*(1-Math.cos(th))+.42,0))}
 function tick(now){
@@ -25,7 +25,12 @@ function tick(now){
   if(!dead){
     let f=frameAt(s);
     v+=(-9.81*f.g+4.6-.055*v)*dt; v=THREE.MathUtils.clamp(v,15,70); s+=v*dt;
-    const curveA=-v*v*f.k;\n    // Progressive steering: enough authority to counter hard corners without snapping laterally.\n    const steerScale=10+20*Math.min(1,Math.abs(curveA)/28);\n    const control=input*steerScale, center=-9.81*Math.sin(theta);
+    const curveA=-v*v*f.k;
+    if(input!==0) holdTime=Math.min(1.4,holdTime+dt); else holdTime=0;
+    // Hold-to-build steering: taps are gentle; sustained press ramps sharply for corner recovery.
+    const h=holdTime/1.4;
+    const steerScale=5+43*h*h*h;
+    const control=input*steerScale, center=-9.81*Math.sin(theta);
     omega+=((control+curveA+center)/R-omega*2.25)*dt; omega=THREE.MathUtils.clamp(omega,-1.25,1.25); theta+=omega*dt;
     if(s-checkpoint>220) checkpoint=s;
     f=frameAt(Math.min(s,total-3));
