@@ -72,19 +72,26 @@ function tick(now){
     const normal=rr.clone().multiplyScalar(-Math.sin(theta)).add(new THREE.Vector3(0,Math.cos(theta),0)).normalize();
     rider.position.copy(p); rider.up.copy(normal); rider.lookAt(p.clone().add(t));
     emitSpray(p,t,rr,normal,v,dt);
-    // Rider-anchored chase camera: keep the player at a stable screen position while the world/camera works around them.
-    const camTarget=p.clone().addScaledVector(normal,.35).addScaledVector(t,1.15);
-    const desiredCam=p.clone().addScaledVector(t,-5.15).addScaledVector(normal,2.35);
-    // Hard distance lock prevents accumulated follow lag at high speed: rider apparent size stays constant.
+    // Reference-style contextual camera: rider remains the anchor, but shot language changes with course shape.
+    const absK=Math.abs(f.k), steepDown=THREE.MathUtils.clamp((-f.g-.18)/.37,0,1), uphill=THREE.MathUtils.clamp((f.g+.02)/.20,0,1), turn=THREE.MathUtils.clamp(absK/.009,0,1);
+    const camTarget=p.clone().addScaledVector(normal,.34).addScaledVector(t,1.0);
+    let back=5.15, height=2.35, side=0, lookAhead=72, aheadMix=.18;
+    // Drops: rise and pull back to reveal the fall and destination below.
+    back+=steepDown*1.05; height+=steepDown*1.35; lookAhead+=steepDown*32; aheadMix+=steepDown*.08;
+    // Climbs/crests: lower the camera and shorten look-ahead so the crest feels larger.
+    back-=uphill*.45; height-=uphill*.48; lookAhead-=uphill*18; aheadMix-=uphill*.04;
+    // Curves: orbit toward the outside, exposing the bend instead of staring straight down the tangent.
+    side+=(-Math.sign(f.k))*turn*1.75; back+=turn*.35; height+=turn*.22; lookAhead+=turn*12; aheadMix+=turn*.05;
+    const desiredCam=p.clone().addScaledVector(t,-back).addScaledVector(normal,height).addScaledVector(rr,side);
     camera.position.copy(desiredCam);
-    const ahead=frameAt(Math.min(total-3,s+72)).p;
-    const lookTarget=camTarget.clone().addScaledVector(normal,-.62).lerp(ahead,.18);
+    const ahead=frameAt(Math.min(total-3,s+lookAhead)).p;
+    const lookTarget=camTarget.clone().addScaledVector(normal,-.58).lerp(ahead,THREE.MathUtils.clamp(aheadMix,.12,.34));
     camera.up.copy(normal);
     camera.lookAt(lookTarget);
     prog.textContent=Math.min(100,Math.floor(s/total*100))+'%';
     if(Math.abs(theta)>=lip||s>=total-4){
       dead=true; airVel.copy(t).multiplyScalar(v).addScaledVector(rr,omega*R).addScaledVector(normal,3);
-      setTimeout(()=>fail.style.display='grid',180);
+      setTimeout(()=>{if(dead)fail.style.display='grid'},2000);
     }
   } else {
     rider.position.addScaledVector(airVel,dt); airVel.y-=9.81*dt; camera.lookAt(rider.position);
