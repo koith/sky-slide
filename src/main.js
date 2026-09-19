@@ -15,10 +15,16 @@ const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float
 const rider=new THREE.Group(), skin=new THREE.MeshStandardMaterial({color:0xffc3a1}), suit=new THREE.MeshStandardMaterial({color:0xff594d});
 const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.34,1.0,5,9),suit);torso.rotation.x=Math.PI/2;rider.add(torso);
 const head=new THREE.Mesh(new THREE.SphereGeometry(.31,14,10),skin);head.position.z=-.9;rider.add(head);
-const arms=[],legs=[];
-function limb(x,z,len,rad,mat){const pivot=new THREE.Group();pivot.position.set(x,.02,z);const mesh=new THREE.Mesh(new THREE.CapsuleGeometry(rad,len,4,7),mat);mesh.rotation.x=Math.PI/2;mesh.position.z=len*.5;pivot.add(mesh);rider.add(pivot);return pivot}
-arms.push(limb(-.42,-.42,.68,.10,skin),limb(.42,-.42,.68,.10,skin));
-legs.push(limb(-.23,.55,.78,.13,suit),limb(.23,.55,.78,.13,suit));
+const arms=[],forearms=[],legs=[],shins=[];
+function jointedLimb(x,z,upperLen,lowerLen,rad,mat,upperList,lowerList){
+  const upper=new THREE.Group(); upper.position.set(x,.02,z);
+  const upperMesh=new THREE.Mesh(new THREE.CapsuleGeometry(rad,upperLen,4,7),mat); upperMesh.rotation.x=Math.PI/2; upperMesh.position.z=upperLen*.5; upper.add(upperMesh);
+  const lower=new THREE.Group(); lower.position.z=upperLen;
+  const lowerMesh=new THREE.Mesh(new THREE.CapsuleGeometry(rad*.88,lowerLen,4,7),mat); lowerMesh.rotation.x=Math.PI/2; lowerMesh.position.z=lowerLen*.5; lower.add(lowerMesh); upper.add(lower); rider.add(upper);
+  upperList.push(upper); lowerList.push(lower);
+}
+jointedLimb(-.42,-.42,.38,.36,.10,skin,arms,forearms); jointedLimb(.42,-.42,.38,.36,.10,skin,arms,forearms);
+jointedLimb(-.23,.55,.42,.42,.13,suit,legs,shins); jointedLimb(.23,.55,.42,.42,.13,suit,legs,shins);
 scene.add(rider);
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
@@ -33,6 +39,10 @@ function tick(now){
   arms[0].rotation.z=.18*Math.sin(flap*1.31); arms[1].rotation.z=-.18*Math.sin(flap*1.31+.5);
   legs[0].rotation.y=.22*Math.sin(flap*1.17+1.2); legs[1].rotation.y=-.22*Math.sin(flap*1.17+.2);
   legs[0].rotation.z=.12*Math.sin(flap*.91); legs[1].rotation.z=-.12*Math.sin(flap*.91+.8);
+  forearms[0].rotation.x=.35+.38*Math.sin(flap*1.43+.4); forearms[1].rotation.x=.35+.38*Math.sin(flap*1.37+1.7);
+  forearms[0].rotation.y=.18*Math.sin(flap*.83); forearms[1].rotation.y=-.18*Math.sin(flap*.89+.6);
+  shins[0].rotation.x=-.25+.42*Math.sin(flap*1.21+2.1); shins[1].rotation.x=-.25+.42*Math.sin(flap*1.29+.9);
+  shins[0].rotation.y=.15*Math.sin(flap*.77+.3); shins[1].rotation.y=-.15*Math.sin(flap*.81+1.1);
   if(!dead){
     let f=frameAt(s);
     v+=(-9.81*f.g+4.6-.055*v)*dt; v=THREE.MathUtils.clamp(v,15,70); s+=v*dt;
@@ -40,7 +50,7 @@ function tick(now){
     if(input!==0) holdTime=Math.min(1.4,holdTime+dt); else holdTime=0;
     // Hold-to-build steering: taps are gentle; sustained press ramps sharply for corner recovery.
     const h=holdTime/1.4;
-    const steerScale=5+43*h*h*h;
+    const steerScale=5+55*Math.pow(h,1.65);
     const control=input*steerScale, center=-9.81*Math.sin(theta);
     omega+=((control+curveA+center)/R-omega*2.25)*dt; omega=THREE.MathUtils.clamp(omega,-1.25,1.25); theta+=omega*dt;
     if(s-checkpoint>220) checkpoint=s;
