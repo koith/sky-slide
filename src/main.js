@@ -25,8 +25,8 @@ function tick(now){
   if(!dead){
     let f=frameAt(s);
     v+=(-9.81*f.g+4.6-.055*v)*dt; v=THREE.MathUtils.clamp(v,15,70); s+=v*dt;
-    const curveA=-v*v*f.k, control=input*28.0, center=-9.81*Math.sin(theta);
-    omega+=((control+curveA+center)/R-omega*1.15)*dt; theta+=omega*dt;
+    const curveA=-v*v*f.k, control=input*42.0, center=-9.81*Math.sin(theta);
+    omega+=((control+curveA+center)/R-omega*1.55)*dt; theta+=omega*dt;
     if(s-checkpoint>220) checkpoint=s;
     f=frameAt(Math.min(s,total-3));
     const p=worldPos(f,theta),t=tangent(f),rr=right(f);
