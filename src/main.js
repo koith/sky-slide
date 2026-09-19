@@ -55,7 +55,7 @@ let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vect
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
 function reset(){s=TEST_STAGE2?total-150:checkpoint;v=TEST_STAGE2?42:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;fail.style.display='none';for(const b of blocks){b.active=false;b.hit=false;b.vel.set(0,0,0);b.spin.set(0,0,0)}}
-function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;launchVel.copy(t).multiplyScalar(Math.max(38,v*.92)).addScaledVector(rr,omega*R*2.4);launchVel.y+=10;rider.position.copy(p).addScaledVector(t,1.2);prog.textContent='DESTROY · 0';}
+function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;launchVel.copy(t).multiplyScalar(Math.max(42,v)).addScaledVector(rr,omega*R*2.4);launchVel.y=Math.max(16,launchVel.y+18);rider.position.copy(p).addScaledVector(t,4.5).add(new THREE.Vector3(0,1.2,0));prog.textContent='DESTROY · 0';}
 $('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('contextmenu',x=>x.preventDefault());e.addEventListener('selectstart',x=>x.preventDefault());e.addEventListener('pointerdown',x=>{x.preventDefault();e.setPointerCapture?.(x.pointerId);input=val;holdTime=0});['pointerup','pointercancel','lostpointercapture'].forEach(n=>e.addEventListener(n,x=>{x.preventDefault?.();if(input===val){input=0;holdTime=0}}))}bind('#l',-1);bind('#r',1);
 function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw)).normalize()} function right(f){return new THREE.Vector3(Math.cos(f.yaw),0,Math.sin(f.yaw)).normalize()}
 function worldPos(f,th){return f.p.clone().addScaledVector(right(f),R*Math.sin(th)).add(new THREE.Vector3(0,R*(1-Math.cos(th))+.42,0))}
@@ -109,7 +109,7 @@ function tick(now){
     camera.up.copy(normal); camera.lookAt(lookTarget);
     prog.textContent=Math.min(100,Math.floor(s/total*100))+'%';
     if(Math.abs(theta)>=lip){dead=true;airVel.copy(t).multiplyScalar(v).addScaledVector(rr,omega*R).addScaledVector(normal,3);setTimeout(()=>{if(dead&&stage===1)fail.style.display='grid'},2000)}
-    else if(s>=total-4){launchStage2(p,t,rr)}
+    else if(s>=total-22){launchStage2(p,t,rr)}
     } else if(stage===2){
       const steer=right(targetFrame).multiplyScalar(input*7.5*dt); launchVel.add(steer); launchVel.y-=9.81*dt; rider.position.addScaledVector(launchVel,dt);
       const toTarget=targetOrigin.clone().sub(rider.position),flightDir=launchVel.clone().normalize();rider.lookAt(rider.position.clone().add(flightDir));
