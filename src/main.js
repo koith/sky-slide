@@ -28,10 +28,10 @@ jointedLimb(-.23,.55,.42,.42,.13,suit,legs,shins); jointedLimb(.23,.55,.42,.42,.
 scene.add(rider);
 // Water spray: pooled translucent droplets emitted behind the rider while in contact with the slide.
 const sprayGeo=new THREE.SphereGeometry(.075,5,4), sprayMat=new THREE.MeshBasicMaterial({color:0xe8fbff,transparent:true,opacity:.72,depthWrite:false});
-const sprayPool=[]; for(let i=0;i<48;i++){const m=new THREE.Mesh(sprayGeo,sprayMat.clone());m.visible=false;scene.add(m);sprayPool.push({m,life:0,vel:new THREE.Vector3()})}
+const sprayPool=[]; for(let i=0;i<96;i++){const m=new THREE.Mesh(sprayGeo,sprayMat.clone());m.visible=false;scene.add(m);sprayPool.push({m,life:0,vel:new THREE.Vector3()})}
 let sprayCursor=0, sprayAcc=0;
 function emitSpray(p,t,rr,normal,speed,dt){
-  sprayAcc+=dt*(10+speed*.55);
+  sprayAcc+=dt*(24+speed*1.15);
   while(sprayAcc>=1){sprayAcc-=1;const q=sprayPool[sprayCursor++%sprayPool.length];q.life=.28+Math.random()*.24;q.m.visible=true;
     q.m.position.copy(p).addScaledVector(t,-.55).addScaledVector(rr,(Math.random()-.5)*.65).addScaledVector(normal,.08);
     q.vel.copy(t).multiplyScalar(-1.5-Math.random()*2.2).addScaledVector(rr,(Math.random()-.5)*(2.2+speed*.025)).addScaledVector(normal,1.1+Math.random()*2.4);
@@ -47,15 +47,15 @@ function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw
 function worldPos(f,th){return f.p.clone().addScaledVector(right(f),R*Math.sin(th)).add(new THREE.Vector3(0,R*(1-Math.cos(th))+.42,0))}
 function tick(now){
   const dt=Math.min(.03,(now-last)/1000); last=now;
-  const flap=now*.009;
-  arms[0].rotation.y=.35*Math.sin(flap); arms[1].rotation.y=-.35*Math.sin(flap+.7);
-  arms[0].rotation.z=.18*Math.sin(flap*1.31); arms[1].rotation.z=-.18*Math.sin(flap*1.31+.5);
-  legs[0].rotation.y=.22*Math.sin(flap*1.17+1.2); legs[1].rotation.y=-.22*Math.sin(flap*1.17+.2);
-  legs[0].rotation.z=.12*Math.sin(flap*.91); legs[1].rotation.z=-.12*Math.sin(flap*.91+.8);
-  forearms[0].rotation.x=.35+.38*Math.sin(flap*1.43+.4); forearms[1].rotation.x=.35+.38*Math.sin(flap*1.37+1.7);
-  forearms[0].rotation.y=.18*Math.sin(flap*.83); forearms[1].rotation.y=-.18*Math.sin(flap*.89+.6);
-  shins[0].rotation.x=-.25+.42*Math.sin(flap*1.21+2.1); shins[1].rotation.x=-.25+.42*Math.sin(flap*1.29+.9);
-  shins[0].rotation.y=.15*Math.sin(flap*.77+.3); shins[1].rotation.y=-.15*Math.sin(flap*.81+1.1);
+  const flap=now*(dead?.016:.0065), amp=dead?1:0.28;
+  arms[0].rotation.y=amp*.48*Math.sin(flap); arms[1].rotation.y=-amp*.48*Math.sin(flap+.7);
+  arms[0].rotation.z=amp*.32*Math.sin(flap*1.31); arms[1].rotation.z=-amp*.32*Math.sin(flap*1.31+.5);
+  legs[0].rotation.y=amp*.34*Math.sin(flap*1.17+1.2); legs[1].rotation.y=-amp*.34*Math.sin(flap*1.17+.2);
+  legs[0].rotation.z=amp*.22*Math.sin(flap*.91); legs[1].rotation.z=-amp*.22*Math.sin(flap*.91+.8);
+  forearms[0].rotation.x=.22+amp*.72*Math.sin(flap*1.43+.4); forearms[1].rotation.x=.22+amp*.72*Math.sin(flap*1.37+1.7);
+  forearms[0].rotation.y=amp*.32*Math.sin(flap*.83); forearms[1].rotation.y=-amp*.32*Math.sin(flap*.89+.6);
+  shins[0].rotation.x=-.16+amp*.78*Math.sin(flap*1.21+2.1); shins[1].rotation.x=-.16+amp*.78*Math.sin(flap*1.29+.9);
+  shins[0].rotation.y=amp*.28*Math.sin(flap*.77+.3); shins[1].rotation.y=-amp*.28*Math.sin(flap*.81+1.1);
   if(!dead){
     let f=frameAt(s);
     v+=(-9.81*f.g+4.6-.055*v)*dt; v=THREE.MathUtils.clamp(v,15,70); s+=v*dt;
