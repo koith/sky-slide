@@ -52,21 +52,20 @@ physics.createCollider(RAPIER.ColliderDesc.cuboid(15,.5,12).setFriction(.85).set
 const blocks=[], supports=[];
 const blockGeo=new THREE.BoxGeometry(1.35,.95,1.35), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
 const supportMat=new THREE.MeshStandardMaterial({color:0x8c9299,roughness:.72,metalness:.08});
-const scoreLabelCache=new Map();
-function scoreLabel(value){
-  if(scoreLabelCache.has(value))return scoreLabelCache.get(value);
-  const cv=document.createElement('canvas');cv.width=256;cv.height=128;const x=cv.getContext('2d');
-  x.fillStyle='rgba(255,255,255,.94)';x.fillRect(18,25,220,78);x.font='900 58px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillStyle='#172033';x.fillText(String(value),128,65);
-  const mat=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false});scoreLabelCache.set(value,mat);return mat;
-}
-function attachScoreLabel(mesh,value){
-  const s=new THREE.Sprite(scoreLabel(value));s.position.set(0,0,.686);s.scale.set(1.08,.54,1);mesh.add(s);
+const scoreMaterialCache=new Map();
+function scoreMaterial(baseMat,value){
+  const key=value+'-'+baseMat.color.getHexString();if(scoreMaterialCache.has(key))return scoreMaterialCache.get(key);
+  const cv=document.createElement('canvas');cv.width=512;cv.height=512;const x=cv.getContext('2d');
+  x.fillStyle='#'+baseMat.color.getHexString();x.fillRect(0,0,512,512);
+  x.font='900 190px sans-serif';x.textAlign='center';x.textBaseline='middle';x.lineWidth=20;x.strokeStyle='rgba(0,0,0,.38)';x.strokeText(String(value),256,265);x.fillStyle='white';x.fillText(String(value),256,265);
+  const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;
+  const mat=baseMat.clone();mat.map=tex;mat.color.set(0xffffff);mat.needsUpdate=true;scoreMaterialCache.set(key,mat);return mat;
 }
 function makeBody(mesh,half,density=1.35,isSupport=false,value=100){
   scene.add(mesh);
   const body=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(mesh.position.x,mesh.position.y,mesh.position.z));
   physics.createCollider(RAPIER.ColliderDesc.cuboid(half.x,half.y,half.z).setDensity(density).setFriction(isSupport?.78:.68).setRestitution(isSupport?.015:.025),body);
-  if(!isSupport&&value>0)attachScoreLabel(mesh,value);const o={m:mesh,body,home:mesh.position.clone(),hit:false,removed:false,scored:false,isSupport,value};(isSupport?supports:blocks).push(o);return o;
+  if(!isSupport&&value>0)mesh.material=scoreMaterial(mesh.material,value);const o={m:mesh,body,home:mesh.position.clone(),hit:false,removed:false,scored:false,isSupport,value};(isSupport?supports:blocks).push(o);return o;
 }
 // Stage-1 target: Angry-Birds-like 3D tower. Two bays, load-bearing posts, and two hard floor slabs.
 // Ordinary scoring blocks can cascade, but the slabs/posts prevent a trivial bottom-row wipe from auto-clearing everything.
@@ -98,11 +97,19 @@ for(let tier=0;tier<3;tier++){
 for(let x=-2;x<=2;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+6)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.42).add(new THREE.Vector3(0,9.65,0));makeBody(m,new THREE.Vector3(.675,.475,.675),1.25,false,250)}
 const allTargetBodies=()=>blocks.concat(supports);
 const fragments=[],scorePops=[];let combo=0,comboClock=0;
+let comboFx=null;
+function updateComboFx(){
+  if(combo<2)return;
+  if(comboFx){scene.remove(comboFx.sp);comboFx.mat.dispose();comboFx.tex.dispose()}
+  const cv=document.createElement('canvas');cv.width=512;cv.height=180;const x=cv.getContext('2d');
+  x.font='900 82px sans-serif';x.textAlign='center';x.textBaseline='middle';x.lineWidth=14;x.strokeStyle='rgba(0,0,0,.6)';x.strokeText('COMBO ×'+combo,256,90);x.fillStyle='#fff36a';x.fillText('COMBO ×'+combo,256,90);
+  const tex=new THREE.CanvasTexture(cv),mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}),sp=new THREE.Sprite(mat);
+  sp.position.copy(targetOrigin).add(new THREE.Vector3(0,11,0));sp.scale.set(6.5,2.3,1);scene.add(sp);comboFx={sp,mat,tex,t:0};
+}
 function scorePop(pos,value){
-  combo=comboClock>0?combo+1:1;comboClock=.72;
+  combo=comboClock>0?combo+1:1;comboClock=.72;updateComboFx();
   const cv=document.createElement('canvas');cv.width=256;cv.height=128;const x=cv.getContext('2d');
   x.font='900 64px sans-serif';x.textAlign='center';x.textBaseline='middle';x.lineWidth=10;x.strokeStyle='rgba(0,0,0,.55)';x.strokeText('+'+value,128,64);x.fillStyle='#fff36a';x.fillText('+'+value,128,64);
-  if(combo>=2){x.font='900 34px sans-serif';x.strokeText('COMBO ×'+combo,128,108);x.fillStyle='#ffffff';x.fillText('COMBO ×'+combo,128,108)}
   const tex=new THREE.CanvasTexture(cv),mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}),sp=new THREE.Sprite(mat);
   sp.position.copy(pos).add(new THREE.Vector3(0,.8,0));sp.scale.set(2.8,1.4,1);scene.add(sp);scorePops.push({sp,mat,tex,t:0});
 }
@@ -120,7 +127,7 @@ function fractureBlock(b){
   scorePop(new THREE.Vector3(p.x,p.y,p.z),b.value);
 }
 function updateEffects(dt){
-  comboClock=Math.max(0,comboClock-dt);if(comboClock===0)combo=0;
+  comboClock=Math.max(0,comboClock-dt);if(comboClock===0){combo=0;if(comboFx){scene.remove(comboFx.sp);comboFx.mat.dispose();comboFx.tex.dispose();comboFx=null}}if(comboFx){comboFx.t+=dt;comboFx.sp.scale.lerp(new THREE.Vector3(5.4,1.9,1),Math.min(1,dt*8));}
   for(let i=scorePops.length-1;i>=0;i--){const p=scorePops[i];p.t+=dt;p.sp.position.y+=dt*1.2;p.sp.scale.multiplyScalar(1+dt*.18);p.mat.opacity=Math.max(0,1-p.t/1.05);if(p.t>1.05){scene.remove(p.sp);p.mat.dispose();p.tex.dispose();scorePops.splice(i,1)}}
   for(let i=fragments.length-1;i>=0;i--){const f=fragments[i],p=f.body.translation(),q=f.body.rotation();f.m.position.set(p.x,p.y,p.z);f.m.quaternion.set(q.x,q.y,q.z,q.w);f.t+=dt;const v=f.body.linvel();if(p.y<=targetOrigin.y+.45&&Math.hypot(v.x,v.y,v.z)<.35)f.rest+=dt;else f.rest=0;if(f.rest>1.4||f.t>6){scene.remove(f.m);physics.removeRigidBody(f.body);fragments.splice(i,1)}}
 }
