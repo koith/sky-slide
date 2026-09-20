@@ -41,7 +41,7 @@ function emitSpray(p,t,rr,normal,speed,dt){
 function updateSpray(dt){for(const q of sprayPool){if(q.life<=0)continue;q.life-=dt;if(q.life<=0){q.m.visible=false;continue}q.vel.y-=5.5*dt;q.m.position.addScaledVector(q.vel,dt);q.m.material.opacity=Math.max(0,q.life*1.8)}}
 // Stage 2 target: stacked rigid blocks with lightweight impulse + gravity physics.
 const targetFrame=frameAt(total-3), targetT=tangent(targetFrame), targetR=right(targetFrame);
-const targetOrigin=targetFrame.p.clone().addScaledVector(targetT,36); targetOrigin.y-=10;
+const targetOrigin=targetFrame.p.clone().addScaledVector(targetT,22); targetOrigin.y-=7;
 const ground=new THREE.Mesh(new THREE.BoxGeometry(30,1,24),new THREE.MeshStandardMaterial({color:0x67b85f,roughness:.9}));ground.position.copy(targetOrigin).add(new THREE.Vector3(0,-.5,0));scene.add(ground);
 const blocks=[], blockGeo=new THREE.BoxGeometry(1.45,1.0,1.45), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
 for(let y=0;y<9;y++)for(let x=-4;x<=4;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+y+8)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.48).add(new THREE.Vector3(0,.52+y*1.02,0));scene.add(m);blocks.push({m,vel:new THREE.Vector3(),spin:new THREE.Vector3(),active:false,hit:false})}
@@ -54,8 +54,8 @@ const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opac
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-65:checkpoint;v=TEST_STAGE2?12:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;flightCamBlend=0;fail.style.display='none';for(const b of blocks){b.active=false;b.hit=false;b.vel.set(0,0,0);b.spin.set(0,0,0)}}
-function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;launchVel.copy(t).multiplyScalar(Math.min(v,15)).addScaledVector(rr,omega*R*.9);launchVel.y=18;rider.position.copy(p).addScaledVector(t,4.5).add(new THREE.Vector3(0,1.2,0));prog.textContent='DESTROY · 0';}
+function reset(){s=TEST_STAGE2?total-48:checkpoint;v=TEST_STAGE2?8:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;flightCamBlend=0;fail.style.display='none';for(const b of blocks){b.active=false;b.hit=false;b.vel.set(0,0,0);b.spin.set(0,0,0)}}
+function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;launchVel.copy(t).multiplyScalar(Math.min(v,10)).addScaledVector(rr,omega*R*.65);launchVel.y=13;rider.position.copy(p).addScaledVector(t,4.5).add(new THREE.Vector3(0,1.2,0));prog.textContent='DESTROY · 0';}
 $('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('contextmenu',x=>x.preventDefault());e.addEventListener('selectstart',x=>x.preventDefault());e.addEventListener('pointerdown',x=>{x.preventDefault();e.setPointerCapture?.(x.pointerId);input=val;holdTime=0});['pointerup','pointercancel','lostpointercapture'].forEach(n=>e.addEventListener(n,x=>{x.preventDefault?.();if(input===val){input=0;holdTime=0}}))}bind('#l',-1);bind('#r',1);
 function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw)).normalize()} function right(f){return new THREE.Vector3(Math.cos(f.yaw),0,Math.sin(f.yaw)).normalize()}
 function worldPos(f,th){return f.p.clone().addScaledVector(right(f),R*Math.sin(th)).add(new THREE.Vector3(0,R*(1-Math.cos(th))+.42,0))}
