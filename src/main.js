@@ -49,23 +49,64 @@ const ground=new THREE.Mesh(new THREE.BoxGeometry(30,1,24),new THREE.MeshStandar
 const physics=new RAPIER.World({x:0,y:-9.81,z:0});
 const groundBody=physics.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(ground.position.x,ground.position.y,ground.position.z));
 physics.createCollider(RAPIER.ColliderDesc.cuboid(15,.5,12).setFriction(.85).setRestitution(.08),groundBody);
-const blocks=[], blockGeo=new THREE.BoxGeometry(1.45,1.0,1.45), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
-for(let y=0;y<9;y++)for(let x=-4;x<=4;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+y+8)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.48).add(new THREE.Vector3(0,.52+y*1.02,0));scene.add(m);
-const body=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(m.position.x,m.position.y,m.position.z));
-physics.createCollider(RAPIER.ColliderDesc.cuboid(.725,.5,.725).setDensity(.22).setFriction(.42).setRestitution(.08),body);
-blocks.push({m,body,home:m.position.clone(),hit:false})}
+const blocks=[], supports=[];
+const blockGeo=new THREE.BoxGeometry(1.35,.95,1.35), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
+const supportMat=new THREE.MeshStandardMaterial({color:0x8c9299,roughness:.72,metalness:.08});
+function makeBody(mesh,half,density=.22,isSupport=false,value=100){
+  scene.add(mesh);
+  const body=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(mesh.position.x,mesh.position.y,mesh.position.z));
+  physics.createCollider(RAPIER.ColliderDesc.cuboid(half.x,half.y,half.z).setDensity(density).setFriction(isSupport?.72:.42).setRestitution(isSupport?.025:.08),body);
+  const o={m:mesh,body,home:mesh.position.clone(),hit:false,removed:false,isSupport,value};(isSupport?supports:blocks).push(o);return o;
+}
+// Stage-1 target: Angry-Birds-like 3D tower. Two bays, load-bearing posts, and two hard floor slabs.
+// Ordinary scoring blocks can cascade, but the slabs/posts prevent a trivial bottom-row wipe from auto-clearing everything.
+for(let tier=0;tier<3;tier++){
+  const baseY=.5+tier*3.05;
+  for(const sx of [-1,1]){
+    const px=sx*3.05;
+    for(let row=0;row<2;row++)for(let col=-1;col<=1;col++){
+      const m=new THREE.Mesh(blockGeo,blockMats[(tier*2+row+col+7)%blockMats.length]);
+      m.position.copy(targetOrigin).addScaledVector(targetR,px+col*1.38).add(new THREE.Vector3(0,baseY+row*.98,0));
+      makeBody(m,new THREE.Vector3(.675,.475,.675),.22,false,tier===2?175:(tier===1?125:100));
+    }
+  }
+  // paired load-bearing posts between bays
+  for(const px of [-1.48,1.48]){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(.52,2.35,1.55),supportMat);
+    m.position.copy(targetOrigin).addScaledVector(targetR,px).add(new THREE.Vector3(0,baseY+.72,0));
+    makeBody(m,new THREE.Vector3(.26,1.175,.775),2.8,true,0);
+  }
+  if(tier<2){
+    const slab=new THREE.Mesh(new THREE.BoxGeometry(9.8,.42,1.75),supportMat);
+    slab.position.copy(targetOrigin).add(new THREE.Vector3(0,baseY+2.18,0));
+    // orient slab across target face
+    slab.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0),targetR.clone().normalize());
+    makeBody(slab,new THREE.Vector3(4.9,.21,.875),3.8,true,0);
+  }
+}
+// crown: fewer, higher-value blocks reward deliberate upper shots.
+for(let x=-2;x<=2;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+6)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.42).add(new THREE.Vector3(0,9.65,0));makeBody(m,new THREE.Vector3(.675,.475,.675),.2,false,250)}
+const allTargetBodies=()=>blocks.concat(supports);
+let removedScore=0;
+function releaseTarget(){for(const b of allTargetBodies()){if(b.removed)continue;const p=b.body.translation(),q=b.body.rotation();b.body.setBodyType(RAPIER.RigidBodyType.Dynamic,true);b.body.setTranslation(p,true);b.body.setRotation(q,true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true);b.body.wakeUp()}}
+function syncPhysics(dt){
+  physics.timestep=Math.min(1/45,dt||1/60);physics.step();
+  for(const b of allTargetBodies()){if(b.removed)continue;const p=b.body.translation(),q=b.body.rotation();b.m.position.set(p.x,p.y,p.z);b.m.quaternion.set(q.x,q.y,q.z,q.w)}
+}
+function removeScoredBlocks(dt){
+  if(!impactDone)return;
+  for(const b of blocks){if(b.removed)continue;
+    const moved=b.m.position.distanceTo(b.home),onGround=b.m.position.y<=targetOrigin.y+.72;
+    b.groundTime=onGround?(b.groundTime||0)+dt:0;
+    if(moved>3.25||b.groundTime>.38){
+      b.removed=true;removedScore+=b.value;scene.remove(b.m);physics.removeRigidBody(b.body);
+    }
+  }
+}
 let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0,riderGrounded=false,ragdoll=false;
 const riderSpin=new THREE.Vector3();
 const riderBody=physics.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0,-500,0).setCanSleep(true).setCcdEnabled(true));
 const riderCollider=physics.createCollider(RAPIER.ColliderDesc.capsule(.72,.38).setDensity(11.0).setFriction(.62).setRestitution(.04),riderBody);
-function releaseTarget(){
-  for(const b of blocks){
-    const p=b.body.translation(),q=b.body.rotation();
-    b.body.setBodyType(RAPIER.RigidBodyType.Dynamic,true);
-    b.body.setTranslation(p,true);b.body.setRotation(q,true);
-    b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true);b.body.wakeUp();
-  }
-}
 function startRagdoll(){
   if(ragdoll)return;ragdoll=true;
   riderBody.setTranslation({x:rider.position.x,y:rider.position.y,z:rider.position.z},true);
@@ -82,7 +123,7 @@ const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opac
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of blocks){b.hit=false;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
+function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
 function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;
   rider.position.copy(p).addScaledVector(t,2.0).add(new THREE.Vector3(0,1.0,0));
   if(TEST_STAGE2){
@@ -176,12 +217,12 @@ function tick(now){
       camera.up.set(0,1,0);
       const aim=rider.position.clone().lerp(targetOrigin,THREE.MathUtils.clamp(.32+distToTarget/180,.36,.55));
       camera.lookAt(aim);
-      if(!impactDone){for(const b of blocks){const d=rider.position.distanceTo(b.m.position);if(d<1.38){impactDone=true;
+      if(!impactDone){for(const b of allTargetBodies()){const d=rider.position.distanceTo(b.m.position);if(d<1.38){impactDone=true;
         const hitDir=launchVel.clone().normalize(),hitSpeed=launchVel.length(),baseImpulse=THREE.MathUtils.clamp(hitSpeed*12.0,135,260);
         releaseTarget();startRagdoll();
         // Apply the projectile momentum at the contact patch; nearby blocks receive only a small falloff impulse.
-        for(const o of blocks){
-          const rel=o.m.position.clone().sub(rider.position),dist=rel.length();
+        for(const o of allTargetBodies()){
+          if(o.removed)continue;const rel=o.m.position.clone().sub(rider.position),dist=rel.length();
           if(dist<4.25){
             const fall=Math.pow(Math.max(0,1-dist/4.25),1.35);
             const lateral=rel.clone().sub(hitDir.clone().multiplyScalar(rel.dot(hitDir)));
@@ -197,7 +238,7 @@ function tick(now){
           }
         }
         score+=100;break}}}
-      let destroyed=0;for(const b of blocks){if(Math.abs(b.m.position.x-b.home.x)>.9||Math.abs(b.m.position.y-b.home.y)>.9||Math.abs(b.m.position.z-b.home.z)>.9)destroyed++}prog.textContent='DESTROY · '+(score+destroyed*25);
+      removeScoredBlocks(dt);prog.textContent='DESTROY · '+(score+removedScore);
       if(impactDone){
         // A successful hit ends the run as a result sequence, not a failure.
         if(ragdoll){const lv=riderBody.linvel(),av=riderBody.angvel(),spd=Math.hypot(lv.x,lv.y,lv.z),aspd=Math.hypot(av.x,av.y,av.z);if(spd<.45&&aspd<.5)finishTimer+=dt;else finishTimer=Math.max(0,finishTimer-dt*.25);}
@@ -211,7 +252,7 @@ function tick(now){
     const fallCam=rider.position.clone().addScaledVector(fallDir,-5.8).add(new THREE.Vector3(0,2.3,0));
     camera.position.lerp(fallCam,1-Math.exp(-5.5*dt)); camera.up.set(0,1,0); camera.lookAt(rider.position);
   }
-  updateSpray(dt); syncPhysics(); syncRiderBody();
+  updateSpray(dt); syncPhysics(dt); syncRiderBody();
   renderer.render(scene,camera); requestAnimationFrame(tick);
 }
 reset(); requestAnimationFrame(tick);
