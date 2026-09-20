@@ -52,12 +52,12 @@ physics.createCollider(RAPIER.ColliderDesc.cuboid(15,.5,12).setFriction(.85).set
 const blocks=[], blockGeo=new THREE.BoxGeometry(1.45,1.0,1.45), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
 for(let y=0;y<9;y++)for(let x=-4;x<=4;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+y+8)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.48).add(new THREE.Vector3(0,.52+y*1.02,0));scene.add(m);
 const body=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(m.position.x,m.position.y,m.position.z));
-physics.createCollider(RAPIER.ColliderDesc.cuboid(.725,.5,.725).setDensity(.8).setFriction(.72).setRestitution(.06),body);
+physics.createCollider(RAPIER.ColliderDesc.cuboid(.725,.5,.725).setDensity(.22).setFriction(.58).setRestitution(.04),body);
 blocks.push({m,body,home:m.position.clone(),hit:false})}
 let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0,riderGrounded=false,ragdoll=false;
 const riderSpin=new THREE.Vector3();
 const riderBody=physics.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0,-500,0).setCanSleep(true).setCcdEnabled(true));
-const riderCollider=physics.createCollider(RAPIER.ColliderDesc.capsule(.72,.38).setDensity(4.2).setFriction(.72).setRestitution(.05),riderBody);
+const riderCollider=physics.createCollider(RAPIER.ColliderDesc.capsule(.72,.38).setDensity(11.0).setFriction(.62).setRestitution(.04),riderBody);
 function releaseTarget(){
   for(const b of blocks){
     const p=b.body.translation(),q=b.body.rotation();
@@ -177,10 +177,10 @@ function tick(now){
       const aim=rider.position.clone().lerp(targetOrigin,THREE.MathUtils.clamp(.32+distToTarget/180,.36,.55));
       camera.lookAt(aim);
       if(!impactDone){for(const b of blocks){const d=rider.position.distanceTo(b.m.position);if(d<1.38){impactDone=true;
-        const hitDir=launchVel.clone().normalize(),hitSpeed=launchVel.length(),baseImpulse=THREE.MathUtils.clamp(hitSpeed*4.8,55,105);
+        const hitDir=launchVel.clone().normalize(),hitSpeed=launchVel.length(),baseImpulse=THREE.MathUtils.clamp(hitSpeed*12.0,135,260);
         releaseTarget();startRagdoll();
         // Apply the projectile momentum at the contact patch; nearby blocks receive only a small falloff impulse.
-        for(const o of blocks){const dist=o.m.position.distanceTo(rider.position);if(dist<1.95){const fall=Math.max(.06,1-dist/1.95),imp=hitDir.clone().multiplyScalar(baseImpulse*fall);const away=o.m.position.clone().sub(rider.position);if(away.lengthSq()>.001)imp.addScaledVector(away.normalize(),baseImpulse*.10*fall);o.body.applyImpulse({x:imp.x,y:imp.y,z:imp.z},true)}}
+        for(const o of blocks){const dist=o.m.position.distanceTo(rider.position);if(dist<1.75){const fall=Math.max(.10,1-dist/1.75),imp=hitDir.clone().multiplyScalar(baseImpulse*fall);const away=o.m.position.clone().sub(rider.position);if(away.lengthSq()>.001)imp.addScaledVector(away.normalize(),baseImpulse*.06*fall);o.body.applyImpulse({x:imp.x,y:imp.y,z:imp.z},true)}}
         score+=100;break}}}
       let destroyed=0;for(const b of blocks){if(Math.abs(b.m.position.x-b.home.x)>.9||Math.abs(b.m.position.y-b.home.y)>.9||Math.abs(b.m.position.z-b.home.z)>.9)destroyed++}prog.textContent='DESTROY · '+(score+destroyed*25);
       if(impactDone){
