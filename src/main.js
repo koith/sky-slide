@@ -56,7 +56,7 @@ function makeBody(mesh,half,density=1.35,isSupport=false,value=100){
   scene.add(mesh);
   const body=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(mesh.position.x,mesh.position.y,mesh.position.z));
   physics.createCollider(RAPIER.ColliderDesc.cuboid(half.x,half.y,half.z).setDensity(density).setFriction(isSupport?.78:.68).setRestitution(isSupport?.015:.025),body);
-  const o={m:mesh,body,home:mesh.position.clone(),hit:false,removed:false,isSupport,value};(isSupport?supports:blocks).push(o);return o;
+  const o={m:mesh,body,home:mesh.position.clone(),hit:false,removed:false,scored:false,isSupport,value};(isSupport?supports:blocks).push(o);return o;
 }
 // Stage-1 target: Angry-Birds-like 3D tower. Two bays, load-bearing posts, and two hard floor slabs.
 // Ordinary scoring blocks can cascade, but the slabs/posts prevent a trivial bottom-row wipe from auto-clearing everything.
@@ -89,8 +89,12 @@ for(let x=-2;x<=2;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+6)%blockMats
 const allTargetBodies=()=>blocks.concat(supports);
 let removedScore=0;
 function releaseTarget(){for(const b of allTargetBodies()){if(b.removed)continue;const p=b.body.translation(),q=b.body.rotation();b.body.setBodyType(RAPIER.RigidBodyType.Dynamic,true);b.body.setTranslation(p,true);b.body.setRotation(q,true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true);b.body.setLinearDamping(b.isSupport?.28:.18);b.body.setAngularDamping(b.isSupport?.42:.30);b.body.wakeUp()}}
+const PHYS_STEP=1/60;let physAcc=0;
 function syncPhysics(dt){
-  physics.timestep=Math.min(1/45,dt||1/60);physics.step();
+  physAcc=Math.min(physAcc+Math.min(dt||PHYS_STEP,.05),PHYS_STEP*4);
+  physics.timestep=PHYS_STEP;
+  let steps=0;
+  while(physAcc>=PHYS_STEP&&steps<4){physics.step();physAcc-=PHYS_STEP;steps++}
   for(const b of allTargetBodies()){if(b.removed)continue;const p=b.body.translation(),q=b.body.rotation();b.m.position.set(p.x,p.y,p.z);b.m.quaternion.set(q.x,q.y,q.z,q.w)}
 }
 function removeScoredBlocks(dt){
@@ -98,8 +102,8 @@ function removeScoredBlocks(dt){
   for(const b of blocks){if(b.removed)continue;
     const moved=b.m.position.distanceTo(b.home),onGround=b.m.position.y<=targetOrigin.y+.72;
     b.groundTime=onGround?(b.groundTime||0)+dt:0;
-    if(moved>3.25||b.groundTime>.38){
-      b.removed=true;removedScore+=b.value;scene.remove(b.m);physics.removeRigidBody(b.body);
+    if(!b.scored&&(moved>3.25||b.groundTime>.38)){
+      b.scored=true;removedScore+=b.value;
     }
   }
 }
@@ -115,15 +119,11 @@ function startRagdoll(){
 }
 function syncRiderBody(){if(!ragdoll)return;const p=riderBody.translation(),q=riderBody.rotation();rider.position.set(p.x,p.y,p.z);rider.quaternion.set(q.x,q.y,q.z,q.w)}
 
-function syncPhysics(){
-  physics.timestep=1/60; physics.step();
-  for(const b of blocks){const p=b.body.translation(),q=b.body.rotation();b.m.position.set(p.x,p.y,p.z);b.m.quaternion.set(q.x,q.y,q.z,q.w)}
-}
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
+function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
 function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;resultShown=false;stage2Time=0;
   rider.position.copy(p).addScaledVector(t,2.0).add(new THREE.Vector3(0,1.0,0));
   if(TEST_STAGE2){
@@ -220,22 +220,14 @@ function tick(now){
       if(!impactDone){for(const b of allTargetBodies()){const d=rider.position.distanceTo(b.m.position);if(d<1.38){impactDone=true;
         const hitDir=launchVel.clone().normalize(),hitSpeed=launchVel.length(),baseImpulse=THREE.MathUtils.clamp(hitSpeed*24.0,280,520);
         releaseTarget();startRagdoll();
-        // Apply the projectile momentum at the contact patch; nearby blocks receive only a small falloff impulse.
-        for(const o of allTargetBodies()){
-          if(o.removed)continue;const rel=o.m.position.clone().sub(rider.position),dist=rel.length();
-          if(dist<3.15){
-            const fall=Math.pow(Math.max(0,1-dist/3.15),1.25);
-            const lateral=rel.clone().sub(hitDir.clone().multiplyScalar(rel.dot(hitDir)));
-            const side=lateral.lengthSq()>.001?lateral.normalize():targetR.clone();
-            const vertical=Math.max(-.15,Math.min(1.0,rel.y/4.25));
-            // Forward punch dominates; nearby blocks fan outward/upward for a readable cascade.
-            const imp=hitDir.clone().multiplyScalar(baseImpulse*(.18+.82*fall))
-              .addScaledVector(side,baseImpulse*.08*fall)
-              .add(new THREE.Vector3(0,baseImpulse*.015*Math.max(0,vertical)*fall,0));
-            o.body.applyImpulse({x:imp.x,y:imp.y,z:imp.z},true);
-            const torque=new THREE.Vector3(side.z,-side.x*.22,-side.x).multiplyScalar(baseImpulse*.010*fall);
-            o.body.applyTorqueImpulse({x:torque.x,y:torque.y,z:torque.z},true);
-          }
+        // Transfer projectile momentum locally. Secondary destruction now comes from rigid-body contacts and gravity.
+        const rel=b.m.position.clone().sub(rider.position);
+        const contactPoint=rider.position.clone().addScaledVector(hitDir,.65);
+        const localImpulse=hitDir.clone().multiplyScalar(baseImpulse*.72);
+        if(typeof b.body.applyImpulseAtPoint==='function'){
+          b.body.applyImpulseAtPoint({x:localImpulse.x,y:localImpulse.y,z:localImpulse.z},{x:contactPoint.x,y:contactPoint.y,z:contactPoint.z},true);
+        }else{
+          b.body.applyImpulse({x:localImpulse.x,y:localImpulse.y,z:localImpulse.z},true);
         }
         score+=100;break}}}
       stage2Time+=dt;
