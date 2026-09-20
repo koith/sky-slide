@@ -87,6 +87,31 @@ for(let tier=0;tier<3;tier++){
 // crown: fewer, higher-value blocks reward deliberate upper shots.
 for(let x=-2;x<=2;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+6)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.42).add(new THREE.Vector3(0,9.65,0));makeBody(m,new THREE.Vector3(.675,.475,.675),1.25,false,250)}
 const allTargetBodies=()=>blocks.concat(supports);
+const fragments=[],scorePops=[];
+function scorePop(pos,value){
+  const cv=document.createElement('canvas');cv.width=256;cv.height=128;const x=cv.getContext('2d');
+  x.font='900 64px sans-serif';x.textAlign='center';x.textBaseline='middle';x.lineWidth=10;x.strokeStyle='rgba(0,0,0,.55)';x.strokeText('+'+value,128,64);x.fillStyle='#fff36a';x.fillText('+'+value,128,64);
+  const tex=new THREE.CanvasTexture(cv),mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}),sp=new THREE.Sprite(mat);
+  sp.position.copy(pos).add(new THREE.Vector3(0,.8,0));sp.scale.set(2.8,1.4,1);scene.add(sp);scorePops.push({sp,mat,tex,t:0});
+}
+function fractureBlock(b){
+  if(b.fractured||b.removed)return;b.fractured=true;
+  const p=b.body.translation(),q=b.body.rotation(),lv=b.body.linvel(),av=b.body.angvel();
+  scene.remove(b.m);physics.removeRigidBody(b.body);b.removed=true;
+  const offsets=[[-.34,.24,-.34],[.34,.24,.34],[-.34,-.24,.34],[.34,-.24,-.34]];
+  for(const o of offsets){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(.62,.42,.62),b.m.material);m.position.set(p.x+o[0],p.y+o[1],p.z+o[2]);m.quaternion.set(q.x,q.y,q.z,q.w);scene.add(m);
+    const rb=physics.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(m.position.x,m.position.y,m.position.z).setRotation(q).setLinearDamping(.22).setAngularDamping(.34).setCcdEnabled(true));
+    physics.createCollider(RAPIER.ColliderDesc.cuboid(.31,.21,.31).setDensity(1.2).setFriction(.68).setRestitution(.02),rb);
+    rb.setLinvel({x:lv.x,y:lv.y,z:lv.z},true);rb.setAngvel({x:av.x,y:av.y,z:av.z},true);fragments.push({m,body:rb,t:0,rest:0});
+  }
+  scorePop(new THREE.Vector3(p.x,p.y,p.z),b.value);
+}
+function updateEffects(dt){
+  for(let i=scorePops.length-1;i>=0;i--){const p=scorePops[i];p.t+=dt;p.sp.position.y+=dt*1.2;p.sp.scale.multiplyScalar(1+dt*.18);p.mat.opacity=Math.max(0,1-p.t/1.05);if(p.t>1.05){scene.remove(p.sp);p.mat.dispose();p.tex.dispose();scorePops.splice(i,1)}}
+  for(let i=fragments.length-1;i>=0;i--){const f=fragments[i],p=f.body.translation(),q=f.body.rotation();f.m.position.set(p.x,p.y,p.z);f.m.quaternion.set(q.x,q.y,q.z,q.w);f.t+=dt;const v=f.body.linvel();if(p.y<=targetOrigin.y+.45&&Math.hypot(v.x,v.y,v.z)<.35)f.rest+=dt;else f.rest=0;if(f.rest>1.4||f.t>6){scene.remove(f.m);physics.removeRigidBody(f.body);fragments.splice(i,1)}}
+}
+
 let removedScore=0;
 function releaseTarget(){for(const b of allTargetBodies()){if(b.removed)continue;const p=b.body.translation(),q=b.body.rotation();b.body.setBodyType(RAPIER.RigidBodyType.Dynamic,true);b.body.setTranslation(p,true);b.body.setRotation(q,true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true);b.body.setLinearDamping(b.isSupport?.28:.18);b.body.setAngularDamping(b.isSupport?.42:.30);b.body.wakeUp()}}
 const PHYS_STEP=1/60;let physAcc=0;
@@ -103,7 +128,7 @@ function removeScoredBlocks(dt){
     const moved=b.m.position.distanceTo(b.home),onGround=b.m.position.y<=targetOrigin.y+.72;
     b.groundTime=onGround?(b.groundTime||0)+dt:0;
     if(!b.scored&&(moved>3.25||b.groundTime>.38)){
-      b.scored=true;removedScore+=b.value;
+      b.scored=true;removedScore+=b.value;fractureBlock(b);
     }
   }
 }
@@ -123,7 +148,7 @@ const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opac
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
+function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.fractured=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
 function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;resultShown=false;stage2Time=0;
   rider.position.copy(p).addScaledVector(t,2.0).add(new THREE.Vector3(0,1.0,0));
   if(TEST_STAGE2){
@@ -259,7 +284,7 @@ function tick(now){
     const fallCam=rider.position.clone().addScaledVector(fallDir,-5.8).add(new THREE.Vector3(0,2.3,0));
     camera.position.lerp(fallCam,1-Math.exp(-5.5*dt)); camera.up.set(0,1,0); camera.lookAt(rider.position);
   }
-  updateSpray(dt); syncPhysics(dt); syncRiderBody();
+  updateSpray(dt); syncPhysics(dt); syncRiderBody(); updateEffects(dt);
   renderer.render(scene,camera); requestAnimationFrame(tick);
 }
 reset(); requestAnimationFrame(tick);
