@@ -46,7 +46,8 @@ const targetOrigin=targetFrame.p.clone().addScaledVector(targetForward,40); targ
 const ground=new THREE.Mesh(new THREE.BoxGeometry(30,1,24),new THREE.MeshStandardMaterial({color:0x67b85f,roughness:.9}));ground.position.copy(targetOrigin).add(new THREE.Vector3(0,-.5,0));scene.add(ground);
 const blocks=[], blockGeo=new THREE.BoxGeometry(1.45,1.0,1.45), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
 for(let y=0;y<9;y++)for(let x=-4;x<=4;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+y+8)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.48).add(new THREE.Vector3(0,.52+y*1.02,0));scene.add(m);blocks.push({m,vel:new THREE.Vector3(),spin:new THREE.Vector3(),active:false,hit:false})}
-let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0;
+let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0,riderGrounded=false;
+const riderSpin=new THREE.Vector3();
 function activateBlock(b,imp){if(!b.active)b.active=true;b.vel.add(imp);b.spin.add(new THREE.Vector3((Math.random()-.5)*5,(Math.random()-.5)*5,(Math.random()-.5)*5))}
 function updateBlocks(dt){for(const b of blocks){if(!b.active)continue;b.vel.y-=18*dt;b.m.position.addScaledVector(b.vel,dt);b.m.rotation.x+=b.spin.x*dt;b.m.rotation.y+=b.spin.y*dt;b.m.rotation.z+=b.spin.z*dt;b.vel.multiplyScalar(Math.pow(.992,dt*60));if(b.m.position.y<targetOrigin.y+.52){b.m.position.y=targetOrigin.y+.52;if(b.vel.y<0)b.vel.y*=-.22;b.vel.x*=.82;b.vel.z*=.82}
   for(const o of blocks){if(o===b||!o.active)continue;const d=b.m.position.distanceTo(o.m.position);if(d<1.38&&d>.001){const n=o.m.position.clone().sub(b.m.position).normalize(),rv=b.vel.clone().sub(o.vel),sep=Math.max(0,rv.dot(n));if(sep>0){const j=n.multiplyScalar(sep*.52);b.vel.sub(j);o.vel.add(j);activateBlock(o,new THREE.Vector3())}}}
@@ -55,16 +56,16 @@ const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opac
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;flightCamBlend=0;finishTimer=0;fail.style.display='none';for(const b of blocks){b.active=false;b.hit=false;b.vel.set(0,0,0);b.spin.set(0,0,0)}}
-function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;
+function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);fail.style.display='none';for(const b of blocks){b.active=false;b.hit=false;b.vel.set(0,0,0);b.spin.set(0,0,0)}}
+function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;
   rider.position.copy(p).addScaledVector(t,2.0).add(new THREE.Vector3(0,1.0,0));
   if(TEST_STAGE2){
     // Calibrated destruction-test shot: nominal no-input trajectory intersects the middle of the block wall.
     const aim=targetOrigin.clone().add(new THREE.Vector3(0,4.6,0)), flightTime=3.25, delta=aim.sub(rider.position);
     launchVel.set(delta.x/flightTime,(delta.y+.5*9.81*flightTime*flightTime)/flightTime,delta.z/flightTime);
-    launchVel.addScaledVector(rr,omega*R*.35);
+    launchVel.addScaledVector(rr,omega*R*.35);riderSpin.set(1.1+Math.abs(omega)*.8,omega*.9,(Math.random()-.5)*.35);
   }else{
-    launchVel.copy(t).multiplyScalar(v).addScaledVector(rr,omega*R*2.4);
+    launchVel.copy(t).multiplyScalar(v).addScaledVector(rr,omega*R*2.4);riderSpin.set(.7+Math.abs(omega),omega*1.1,omega*.35);
   }
   prog.textContent='DESTROY · 0';}
 $('#retry').onclick=reset;function bind(id,val){let e=$(id);e.addEventListener('contextmenu',x=>x.preventDefault());e.addEventListener('selectstart',x=>x.preventDefault());e.addEventListener('pointerdown',x=>{x.preventDefault();e.setPointerCapture?.(x.pointerId);input=val;holdTime=0});['pointerup','pointercancel','lostpointercapture'].forEach(n=>e.addEventListener(n,x=>{x.preventDefault?.();if(input===val){input=0;holdTime=0}}))}bind('#l',-1);bind('#r',1);
@@ -123,7 +124,12 @@ function tick(now){
     else if(s>=total-10){launchStage2(p,t,rr)}
     } else if(!dead&&stage===2){
       const steer=right(targetFrame).multiplyScalar(input*7.5*dt); launchVel.add(steer); launchVel.y-=9.81*dt; rider.position.addScaledVector(launchVel,dt);
-      const toTarget=targetOrigin.clone().sub(rider.position),flightDir=launchVel.clone().normalize();rider.lookAt(rider.position.clone().add(flightDir));
+      // Airborne body attitude: angular momentum plus steering torque instead of a locked lookAt pose.
+      riderSpin.y+=input*1.25*dt;riderSpin.x+=(-launchVel.y*.018-riderSpin.x*.08)*dt;riderSpin.multiplyScalar(Math.pow(.996,dt*60));
+      rider.rotateX(riderSpin.x*dt);rider.rotateY(riderSpin.y*dt);rider.rotateZ(riderSpin.z*dt);
+      const groundY=targetOrigin.y+.42;
+      if(rider.position.y<=groundY){rider.position.y=groundY;if(!riderGrounded){riderGrounded=true;launchVel.y=Math.abs(launchVel.y)*.20;riderSpin.x+=launchVel.length()*.055;riderSpin.z+=(Math.random()-.5)*1.3}launchVel.y=Math.max(0,launchVel.y);launchVel.x*=Math.pow(.965,dt*60);launchVel.z*=Math.pow(.965,dt*60);riderSpin.multiplyScalar(Math.pow(.94,dt*60));if(launchVel.length()<.45){launchVel.set(0,0,0);riderSpin.multiplyScalar(.8)}}
+      const toTarget=targetOrigin.clone().sub(rider.position),flightDir=launchVel.lengthSq()>.01?launchVel.clone().normalize():targetOrigin.clone().sub(rider.position).normalize();
       // Continuous launch camera: preserve the slide shot, then smoothly widen to frame rider + target together.
       flightCamBlend=Math.min(1,flightCamBlend+dt/1.15);
       const targetDir=toTarget.clone().normalize(), distToTarget=toTarget.length();
@@ -139,8 +145,8 @@ function tick(now){
       let destroyed=0;for(const b of blocks){if(b.active&&(Math.abs(b.m.position.x-targetOrigin.x)>7||b.m.position.y<targetOrigin.y+.2))destroyed++}score+=destroyed;prog.textContent='DESTROY · '+score;
       if(impactDone){
         // A successful hit ends the run as a result sequence, not a failure.
-        finishTimer+=dt;
-        if(finishTimer>2.6){dead=true;prog.textContent='CLEAR · '+score;fail.style.display='none'}
+        if(riderGrounded&&launchVel.length()<.55){finishTimer+=dt;}else finishTimer=Math.max(0,finishTimer-dt*.25);
+        if(finishTimer>.8){dead=true;prog.textContent='CLEAR · '+score;fail.style.display='none'}
       }else if(rider.position.y<targetOrigin.y-3||toTarget.length()>170){dead=true;setTimeout(()=>{if(dead&&!impactDone)fail.style.display='grid'},2000)}
 
   } else {
