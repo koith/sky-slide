@@ -165,7 +165,7 @@ const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opac
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;impactTime=0;combo=0;comboClock=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.fractured=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
+function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;impactTime=0;combo=0;comboClock=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';const ft=fail.querySelector('h1'),fp=fail.querySelector('p');if(ft)ft.textContent='실패!';if(fp)fp.textContent='재도전 할까요?';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.fractured=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
 function launchStage2(p,t,rr){launchCamPos.copy(camera.position);launchCamLook.copy(p).addScaledVector(t,10);stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;resultShown=false;stage2Time=0;impactTime=0;
   rider.position.copy(p).addScaledVector(t,2.0).add(new THREE.Vector3(0,1.0,0));
   if(TEST_STAGE2){
@@ -252,8 +252,8 @@ function tick(now){
       // Continuous launch camera: preserve the slide shot, then smoothly widen to frame rider + target together.
       flightCamBlend=Math.min(1,flightCamBlend+dt/1.15);
       const targetDir=toTarget.clone().normalize(), distToTarget=toTarget.length();
-      const chaseDir=flightDir.clone().lerp(targetDir,.42).normalize();
-      const back=THREE.MathUtils.clamp(6.5+distToTarget*.10,7.5,12.5), height=THREE.MathUtils.clamp(2.6+distToTarget*.035,3.0,5.0);
+      const chaseDir=targetForward.clone().normalize();
+      const back=10.2,height=4.15;
       const desired=rider.position.clone().addScaledVector(chaseDir,-back).add(new THREE.Vector3(0,height,0));
       const ease=flightCamBlend*flightCamBlend*(3-2*flightCamBlend);
       const aim=rider.position.clone().lerp(targetOrigin,THREE.MathUtils.clamp(.32+distToTarget/180,.36,.55));
@@ -299,7 +299,10 @@ function tick(now){
           // One last cleanup/scoring pass before freezing the result.
           removeScoredBlocks(.5);
           resultShown=true;dead=true;score+=removedScore;removedScore=0;
-          prog.textContent='SCORE · '+score;fail.style.display='none';
+          prog.textContent='SCORE · '+score;
+          const title=fail.querySelector('h1'),msg=fail.querySelector('p');
+          if(title)title.textContent='결과';if(msg)msg.textContent='SCORE · '+score;
+          fail.style.display='grid';
         }
       }else if(rider.position.y<targetOrigin.y-3||toTarget.length()>170||stage2Time>7.0){
         // Complete miss or falling out of the play area is the only Stage-2 game over.
