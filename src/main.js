@@ -52,11 +52,21 @@ physics.createCollider(RAPIER.ColliderDesc.cuboid(15,.5,12).setFriction(.85).set
 const blocks=[], supports=[];
 const blockGeo=new THREE.BoxGeometry(1.35,.95,1.35), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
 const supportMat=new THREE.MeshStandardMaterial({color:0x8c9299,roughness:.72,metalness:.08});
+const scoreLabelCache=new Map();
+function scoreLabel(value){
+  if(scoreLabelCache.has(value))return scoreLabelCache.get(value);
+  const cv=document.createElement('canvas');cv.width=256;cv.height=128;const x=cv.getContext('2d');
+  x.fillStyle='rgba(255,255,255,.94)';x.fillRect(18,25,220,78);x.font='900 58px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillStyle='#172033';x.fillText(String(value),128,65);
+  const mat=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthWrite:false});scoreLabelCache.set(value,mat);return mat;
+}
+function attachScoreLabel(mesh,value){
+  const s=new THREE.Sprite(scoreLabel(value));s.position.set(0,0,.686);s.scale.set(1.08,.54,1);mesh.add(s);
+}
 function makeBody(mesh,half,density=1.35,isSupport=false,value=100){
   scene.add(mesh);
   const body=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(mesh.position.x,mesh.position.y,mesh.position.z));
   physics.createCollider(RAPIER.ColliderDesc.cuboid(half.x,half.y,half.z).setDensity(density).setFriction(isSupport?.78:.68).setRestitution(isSupport?.015:.025),body);
-  const o={m:mesh,body,home:mesh.position.clone(),hit:false,removed:false,scored:false,isSupport,value};(isSupport?supports:blocks).push(o);return o;
+  if(!isSupport&&value>0)attachScoreLabel(mesh,value);const o={m:mesh,body,home:mesh.position.clone(),hit:false,removed:false,scored:false,isSupport,value};(isSupport?supports:blocks).push(o);return o;
 }
 // Stage-1 target: Angry-Birds-like 3D tower. Two bays, load-bearing posts, and two hard floor slabs.
 // Ordinary scoring blocks can cascade, but the slabs/posts prevent a trivial bottom-row wipe from auto-clearing everything.
@@ -87,10 +97,12 @@ for(let tier=0;tier<3;tier++){
 // crown: fewer, higher-value blocks reward deliberate upper shots.
 for(let x=-2;x<=2;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+6)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.42).add(new THREE.Vector3(0,9.65,0));makeBody(m,new THREE.Vector3(.675,.475,.675),1.25,false,250)}
 const allTargetBodies=()=>blocks.concat(supports);
-const fragments=[],scorePops=[];
+const fragments=[],scorePops=[];let combo=0,comboClock=0;
 function scorePop(pos,value){
+  combo=comboClock>0?combo+1:1;comboClock=.72;
   const cv=document.createElement('canvas');cv.width=256;cv.height=128;const x=cv.getContext('2d');
   x.font='900 64px sans-serif';x.textAlign='center';x.textBaseline='middle';x.lineWidth=10;x.strokeStyle='rgba(0,0,0,.55)';x.strokeText('+'+value,128,64);x.fillStyle='#fff36a';x.fillText('+'+value,128,64);
+  if(combo>=2){x.font='900 34px sans-serif';x.strokeText('COMBO ×'+combo,128,108);x.fillStyle='#ffffff';x.fillText('COMBO ×'+combo,128,108)}
   const tex=new THREE.CanvasTexture(cv),mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}),sp=new THREE.Sprite(mat);
   sp.position.copy(pos).add(new THREE.Vector3(0,.8,0));sp.scale.set(2.8,1.4,1);scene.add(sp);scorePops.push({sp,mat,tex,t:0});
 }
@@ -108,6 +120,7 @@ function fractureBlock(b){
   scorePop(new THREE.Vector3(p.x,p.y,p.z),b.value);
 }
 function updateEffects(dt){
+  comboClock=Math.max(0,comboClock-dt);if(comboClock===0)combo=0;
   for(let i=scorePops.length-1;i>=0;i--){const p=scorePops[i];p.t+=dt;p.sp.position.y+=dt*1.2;p.sp.scale.multiplyScalar(1+dt*.18);p.mat.opacity=Math.max(0,1-p.t/1.05);if(p.t>1.05){scene.remove(p.sp);p.mat.dispose();p.tex.dispose();scorePops.splice(i,1)}}
   for(let i=fragments.length-1;i>=0;i--){const f=fragments[i],p=f.body.translation(),q=f.body.rotation();f.m.position.set(p.x,p.y,p.z);f.m.quaternion.set(q.x,q.y,q.z,q.w);f.t+=dt;const v=f.body.linvel();if(p.y<=targetOrigin.y+.45&&Math.hypot(v.x,v.y,v.z)<.35)f.rest+=dt;else f.rest=0;if(f.rest>1.4||f.t>6){scene.remove(f.m);physics.removeRigidBody(f.body);fragments.splice(i,1)}}
 }
@@ -148,7 +161,7 @@ const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opac
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;impactTime=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.fractured=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
+function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;impactTime=0;combo=0;comboClock=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.fractured=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
 function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;resultShown=false;stage2Time=0;impactTime=0;
   rider.position.copy(p).addScaledVector(t,2.0).add(new THREE.Vector3(0,1.0,0));
   if(TEST_STAGE2){
@@ -261,6 +274,11 @@ function tick(now){
       prog.textContent='DESTROY · '+totalScore;
       if(impactDone){
         impactTime+=dt;
+        const local=rider.position.clone().sub(targetOrigin);
+        const gx=Math.abs(local.dot(targetR)),gz=Math.abs(local.dot(targetForward));
+        if((gx>15.4||gz>12.4)&&rider.position.y<targetOrigin.y-.9&&!resultShown){
+          resultShown=true;dead=true;score+=removedScore;removedScore=0;prog.textContent='FALL · SCORE '+score;setTimeout(()=>{if(dead)fail.style.display='grid'},650);
+        }
         // Finish from post-impact time, not total Stage-2 flight time. Residual ragdoll jitter must not keep the run alive.
         // Do not wait for tiny residual angular velocity from the physics body.
         const lv=ragdoll?riderBody.linvel():{x:0,y:0,z:0};
