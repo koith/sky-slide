@@ -70,14 +70,14 @@ function tick(now){
   forearms[0].rotation.y=amp*.32*Math.sin(flap*.83); forearms[1].rotation.y=-amp*.32*Math.sin(flap*.89+.6);
   shins[0].rotation.x=-.16+amp*.78*Math.sin(flap*1.21+2.1); shins[1].rotation.x=-.16+amp*.78*Math.sin(flap*1.29+.9);
   shins[0].rotation.y=amp*.28*Math.sin(flap*.77+.3); shins[1].rotation.y=-amp*.28*Math.sin(flap*.81+1.1);
-  if(!dead){
+  if(!dead&&stage===1){
     let f=frameAt(s);
     v+=(-9.81*f.g+4.6-.055*v)*dt; v=THREE.MathUtils.clamp(v,15,70); s+=v*dt;
     const curveA=-v*v*f.k;
-    if(input!==0) holdTime=Math.min(1.4,holdTime+dt); else holdTime=0;
+    if(input!==0) holdTime=Math.min(.9,holdTime+dt); else holdTime=0;
     // Hold-to-build steering: taps are gentle; sustained press ramps sharply for corner recovery.
-    const h=holdTime/1.4;
-    const steerScale=5+55*Math.pow(h,1.65);
+    const h=holdTime/.9;
+    const steerScale=22+42*Math.pow(h,1.35);
     const control=input*steerScale, center=-9.81*Math.sin(theta);
     omega+=((control+curveA+center)/R-omega*2.25)*dt; omega=THREE.MathUtils.clamp(omega,-1.25,1.25); theta+=omega*dt;
     if(s-checkpoint>220) checkpoint=s;
@@ -110,7 +110,7 @@ function tick(now){
     prog.textContent=Math.min(100,Math.floor(s/total*100))+'%';
     if(Math.abs(theta)>=lip){dead=true;airVel.copy(t).multiplyScalar(v).addScaledVector(rr,omega*R).addScaledVector(normal,3);setTimeout(()=>{if(dead&&stage===1)fail.style.display='grid'},2000)}
     else if(s>=total-22){launchStage2(p,t,rr)}
-    } else if(stage===2){
+    } else if(!dead&&stage===2){
       const steer=right(targetFrame).multiplyScalar(input*7.5*dt); launchVel.add(steer); launchVel.y-=9.81*dt; rider.position.addScaledVector(launchVel,dt);
       const toTarget=targetOrigin.clone().sub(rider.position),flightDir=launchVel.clone().normalize();rider.lookAt(rider.position.clone().add(flightDir));
       const desired=rider.position.clone().addScaledVector(flightDir,-6.2).add(new THREE.Vector3(0,2.0,0));camera.position.lerp(desired,1-Math.exp(-8*dt));camera.up.set(0,1,0);camera.lookAt(rider.position.clone().lerp(targetOrigin,.28));
