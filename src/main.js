@@ -218,19 +218,19 @@ function tick(now){
       const aim=rider.position.clone().lerp(targetOrigin,THREE.MathUtils.clamp(.32+distToTarget/180,.36,.55));
       camera.lookAt(aim);
       if(!impactDone){for(const b of allTargetBodies()){const d=rider.position.distanceTo(b.m.position);if(d<1.38){impactDone=true;
-        const hitDir=launchVel.clone().normalize(),hitSpeed=launchVel.length(),baseImpulse=THREE.MathUtils.clamp(hitSpeed*12.0,135,260);
+        const hitDir=launchVel.clone().normalize(),hitSpeed=launchVel.length(),baseImpulse=THREE.MathUtils.clamp(hitSpeed*24.0,280,520);
         releaseTarget();startRagdoll();
         // Apply the projectile momentum at the contact patch; nearby blocks receive only a small falloff impulse.
         for(const o of allTargetBodies()){
           if(o.removed)continue;const rel=o.m.position.clone().sub(rider.position),dist=rel.length();
-          if(dist<4.25){
-            const fall=Math.pow(Math.max(0,1-dist/4.25),1.35);
+          if(dist<5.25){
+            const fall=Math.pow(Math.max(0,1-dist/5.25),1.05);
             const lateral=rel.clone().sub(hitDir.clone().multiplyScalar(rel.dot(hitDir)));
             const side=lateral.lengthSq()>.001?lateral.normalize():targetR.clone();
             const vertical=Math.max(-.15,Math.min(1.0,rel.y/4.25));
             // Forward punch dominates; nearby blocks fan outward/upward for a readable cascade.
-            const imp=hitDir.clone().multiplyScalar(baseImpulse*(.18+.82*fall))
-              .addScaledVector(side,baseImpulse*.22*fall)
+            const imp=hitDir.clone().multiplyScalar(baseImpulse*(.32+1.08*fall))
+              .addScaledVector(side,baseImpulse*.30*fall)
               .add(new THREE.Vector3(0,baseImpulse*(.10+.18*Math.max(0,vertical))*fall,0));
             o.body.applyImpulse({x:imp.x,y:imp.y,z:imp.z},true);
             const torque=new THREE.Vector3(side.z,-side.x*.22,-side.x).multiplyScalar(baseImpulse*.018*fall);
