@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
+await RAPIER.init();
 const $=s=>document.querySelector(s), app=$('#app'), prog=$('#progress'), fail=$('#fail');
 const scene=new THREE.Scene(); scene.background=new THREE.Color(0x78c9f4); scene.fog=new THREE.FogExp2(0x78c9f4,.0018);
 const camera=new THREE.PerspectiveCamera(67,innerWidth/innerHeight,.1,2200);
@@ -44,19 +46,35 @@ const targetFrame=frameAt(total-3), targetT=tangent(targetFrame), targetR=right(
 const targetForward=new THREE.Vector3(targetT.x,0,targetT.z).normalize();
 const targetOrigin=targetFrame.p.clone().addScaledVector(targetForward,40); targetOrigin.y-=12;
 const ground=new THREE.Mesh(new THREE.BoxGeometry(30,1,24),new THREE.MeshStandardMaterial({color:0x67b85f,roughness:.9}));ground.position.copy(targetOrigin).add(new THREE.Vector3(0,-.5,0));scene.add(ground);
+const physics=new RAPIER.World({x:0,y:-9.81,z:0});
+const groundBody=physics.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(ground.position.x,ground.position.y,ground.position.z));
+physics.createCollider(RAPIER.ColliderDesc.cuboid(15,.5,12).setFriction(.85).setRestitution(.08),groundBody);
 const blocks=[], blockGeo=new THREE.BoxGeometry(1.45,1.0,1.45), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
-for(let y=0;y<9;y++)for(let x=-4;x<=4;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+y+8)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.48).add(new THREE.Vector3(0,.52+y*1.02,0));scene.add(m);blocks.push({m,vel:new THREE.Vector3(),spin:new THREE.Vector3(),active:false,hit:false})}
-let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0,riderGrounded=false;
+for(let y=0;y<9;y++)for(let x=-4;x<=4;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+y+8)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.48).add(new THREE.Vector3(0,.52+y*1.02,0));scene.add(m);
+const body=physics.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(m.position.x,m.position.y,m.position.z).setCanSleep(true));
+physics.createCollider(RAPIER.ColliderDesc.cuboid(.725,.5,.725).setDensity(.8).setFriction(.72).setRestitution(.06),body);
+blocks.push({m,body,home:m.position.clone(),hit:false})}
+let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0,riderGrounded=false,ragdoll=false;
 const riderSpin=new THREE.Vector3();
-function activateBlock(b,imp){if(!b.active)b.active=true;b.vel.add(imp);const m=Math.min(1.35,imp.length()*.055);b.spin.add(new THREE.Vector3((Math.random()-.5)*m,(Math.random()-.5)*m,(Math.random()-.5)*m));b.spin.clampLength(0,1.8)}
-function updateBlocks(dt){for(const b of blocks){if(!b.active)continue;b.vel.y-=18*dt;b.m.position.addScaledVector(b.vel,dt);b.m.rotation.x+=b.spin.x*dt;b.m.rotation.y+=b.spin.y*dt;b.m.rotation.z+=b.spin.z*dt;b.vel.multiplyScalar(Math.pow(.992,dt*60));b.spin.multiplyScalar(Math.pow(.975,dt*60));if(b.m.position.y<targetOrigin.y+.52){b.m.position.y=targetOrigin.y+.52;if(b.vel.y<0)b.vel.y*=-.22;b.vel.x*=.82;b.vel.z*=.82}
-  for(const o of blocks){if(o===b||!o.active)continue;const d=b.m.position.distanceTo(o.m.position);if(d<1.38&&d>.001){const n=o.m.position.clone().sub(b.m.position).normalize(),rv=b.vel.clone().sub(o.vel),sep=Math.max(0,rv.dot(n));if(sep>0){const j=n.multiplyScalar(sep*.52);b.vel.sub(j);o.vel.add(j);activateBlock(o,new THREE.Vector3())}}}
-}}
+const riderBody=physics.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0,-500,0).setCanSleep(true).setCcdEnabled(true));
+physics.createCollider(RAPIER.ColliderDesc.capsule(.62,.36).setDensity(1.1).setFriction(.8).setRestitution(.12),riderBody);
+function startRagdoll(){
+  if(ragdoll)return;ragdoll=true;
+  riderBody.setTranslation({x:rider.position.x,y:rider.position.y,z:rider.position.z},true);
+  riderBody.setLinvel({x:launchVel.x,y:launchVel.y,z:launchVel.z},true);
+  riderBody.setAngvel({x:riderSpin.x,y:riderSpin.y,z:riderSpin.z},true);
+}
+function syncRiderBody(){if(!ragdoll)return;const p=riderBody.translation(),q=riderBody.rotation();rider.position.set(p.x,p.y,p.z);rider.quaternion.set(q.x,q.y,q.z,q.w)}
+
+function syncPhysics(){
+  physics.timestep=1/60; physics.step();
+  for(const b of blocks){const p=b.body.translation(),q=b.body.rotation();b.m.position.set(p.x,p.y,p.z);b.m.quaternion.set(q.x,q.y,q.z,q.w)}
+}
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);fail.style.display='none';for(const b of blocks){b.active=false;b.hit=false;b.vel.set(0,0,0);b.spin.set(0,0,0)}}
+function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of blocks){b.hit=false;b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true);b.body.sleep()}}
 function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;
   rider.position.copy(p).addScaledVector(t,2.0).add(new THREE.Vector3(0,1.0,0));
   if(TEST_STAGE2){
@@ -128,7 +146,7 @@ function tick(now){
       riderSpin.y+=input*1.25*dt;riderSpin.x+=(-launchVel.y*.018-riderSpin.x*.08)*dt;riderSpin.multiplyScalar(Math.pow(.996,dt*60));
       rider.rotateX(riderSpin.x*dt);rider.rotateY(riderSpin.y*dt);rider.rotateZ(riderSpin.z*dt);
       const groundY=targetOrigin.y+.78;
-      if(rider.position.y<=groundY){
+      if(!ragdoll&&rider.position.y<=groundY){
         rider.position.y=groundY;
         if(!riderGrounded){riderGrounded=true;const hitVy=Math.min(0,launchVel.y);launchVel.y=Math.min(3.0,-hitVy*.16);riderSpin.x+=Math.min(2.4,launchVel.length()*.07);riderSpin.z+=(Math.random()-.5)*.9}
         else if(launchVel.y<0)launchVel.y=0;
@@ -150,11 +168,11 @@ function tick(now){
       camera.up.set(0,1,0);
       const aim=rider.position.clone().lerp(targetOrigin,THREE.MathUtils.clamp(.32+distToTarget/180,.36,.55));
       camera.lookAt(aim);
-      if(!impactDone){for(const b of blocks){const d=rider.position.distanceTo(b.m.position);if(d<1.25){impactDone=true;const impact=launchVel.clone().multiplyScalar(.42);for(const o of blocks){const dist=o.m.position.distanceTo(rider.position);if(dist<4.8){const fall=Math.max(.08,1-dist/4.8),dir=o.m.position.clone().sub(rider.position).normalize();activateBlock(o,dir.multiplyScalar(impact.length()*fall).addScaledVector(impact.clone().normalize(),impact.length()*.32*fall));if(!o.hit){o.hit=true;score+=Math.round(100*fall)}}}const hitSpeed=launchVel.length();launchVel.multiplyScalar(.32);launchVel.y=Math.max(launchVel.y,2.2);riderSpin.add(new THREE.Vector3(2.4+hitSpeed*.055,(Math.random()-.5)*1.4,(Math.random()-.5)*2.2));riderSpin.clampLength(0,5.2);break}}}
+      if(!impactDone){for(const b of blocks){const d=rider.position.distanceTo(b.m.position);if(d<1.25){impactDone=true;startRagdoll();score+=100;break}}}
       let destroyed=0;for(const b of blocks){if(b.active&&(Math.abs(b.m.position.x-targetOrigin.x)>7||b.m.position.y<targetOrigin.y+.2))destroyed++}score+=destroyed;prog.textContent='DESTROY · '+score;
       if(impactDone){
         // A successful hit ends the run as a result sequence, not a failure.
-        if(riderGrounded&&launchVel.length()<.55){finishTimer+=dt;}else finishTimer=Math.max(0,finishTimer-dt*.25);
+        if(ragdoll){const lv=riderBody.linvel(),av=riderBody.angvel(),spd=Math.hypot(lv.x,lv.y,lv.z),aspd=Math.hypot(av.x,av.y,av.z);if(spd<.45&&aspd<.5)finishTimer+=dt;else finishTimer=Math.max(0,finishTimer-dt*.25);}
         if(finishTimer>.8){dead=true;prog.textContent='CLEAR · '+score;fail.style.display='none'}
       }else if(rider.position.y<targetOrigin.y-3||toTarget.length()>170){dead=true;setTimeout(()=>{if(dead&&!impactDone)fail.style.display='grid'},2000)}
 
@@ -165,7 +183,7 @@ function tick(now){
     const fallCam=rider.position.clone().addScaledVector(fallDir,-5.8).add(new THREE.Vector3(0,2.3,0));
     camera.position.lerp(fallCam,1-Math.exp(-5.5*dt)); camera.up.set(0,1,0); camera.lookAt(rider.position);
   }
-  updateSpray(dt); updateBlocks(dt);
+  updateSpray(dt); syncPhysics(); syncRiderBody();
   renderer.render(scene,camera); requestAnimationFrame(tick);
 }
 reset(); requestAnimationFrame(tick);
