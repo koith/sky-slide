@@ -52,10 +52,10 @@ physics.createCollider(RAPIER.ColliderDesc.cuboid(15,.5,12).setFriction(.85).set
 const blocks=[], supports=[];
 const blockGeo=new THREE.BoxGeometry(1.35,.95,1.35), blockMats=[0xffd166,0x06d6a0,0x118ab2,0xef476f].map(x=>new THREE.MeshStandardMaterial({color:x,roughness:.55}));
 const supportMat=new THREE.MeshStandardMaterial({color:0x8c9299,roughness:.72,metalness:.08});
-function makeBody(mesh,half,density=.22,isSupport=false,value=100){
+function makeBody(mesh,half,density=1.35,isSupport=false,value=100){
   scene.add(mesh);
   const body=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(mesh.position.x,mesh.position.y,mesh.position.z));
-  physics.createCollider(RAPIER.ColliderDesc.cuboid(half.x,half.y,half.z).setDensity(density).setFriction(isSupport?.72:.42).setRestitution(isSupport?.025:.08),body);
+  physics.createCollider(RAPIER.ColliderDesc.cuboid(half.x,half.y,half.z).setDensity(density).setFriction(isSupport?.78:.68).setRestitution(isSupport?.015:.025),body);
   const o={m:mesh,body,home:mesh.position.clone(),hit:false,removed:false,isSupport,value};(isSupport?supports:blocks).push(o);return o;
 }
 // Stage-1 target: Angry-Birds-like 3D tower. Two bays, load-bearing posts, and two hard floor slabs.
@@ -67,7 +67,7 @@ for(let tier=0;tier<3;tier++){
     for(let row=0;row<2;row++)for(let col=-1;col<=1;col++){
       const m=new THREE.Mesh(blockGeo,blockMats[(tier*2+row+col+7)%blockMats.length]);
       m.position.copy(targetOrigin).addScaledVector(targetR,px+col*1.38).add(new THREE.Vector3(0,baseY+row*.98,0));
-      makeBody(m,new THREE.Vector3(.675,.475,.675),.22,false,tier===2?175:(tier===1?125:100));
+      makeBody(m,new THREE.Vector3(.675,.475,.675),1.35,false,tier===2?175:(tier===1?125:100));
     }
   }
   // paired load-bearing posts between bays
@@ -85,10 +85,10 @@ for(let tier=0;tier<3;tier++){
   }
 }
 // crown: fewer, higher-value blocks reward deliberate upper shots.
-for(let x=-2;x<=2;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+6)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.42).add(new THREE.Vector3(0,9.65,0));makeBody(m,new THREE.Vector3(.675,.475,.675),.2,false,250)}
+for(let x=-2;x<=2;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+6)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.42).add(new THREE.Vector3(0,9.65,0));makeBody(m,new THREE.Vector3(.675,.475,.675),1.25,false,250)}
 const allTargetBodies=()=>blocks.concat(supports);
 let removedScore=0;
-function releaseTarget(){for(const b of allTargetBodies()){if(b.removed)continue;const p=b.body.translation(),q=b.body.rotation();b.body.setBodyType(RAPIER.RigidBodyType.Dynamic,true);b.body.setTranslation(p,true);b.body.setRotation(q,true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true);b.body.wakeUp()}}
+function releaseTarget(){for(const b of allTargetBodies()){if(b.removed)continue;const p=b.body.translation(),q=b.body.rotation();b.body.setBodyType(RAPIER.RigidBodyType.Dynamic,true);b.body.setTranslation(p,true);b.body.setRotation(q,true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true);b.body.setLinearDamping(b.isSupport?.28:.18);b.body.setAngularDamping(b.isSupport?.42:.30);b.body.wakeUp()}}
 function syncPhysics(dt){
   physics.timestep=Math.min(1/45,dt||1/60);physics.step();
   for(const b of allTargetBodies()){if(b.removed)continue;const p=b.body.translation(),q=b.body.rotation();b.m.position.set(p.x,p.y,p.z);b.m.quaternion.set(q.x,q.y,q.z,q.w)}
@@ -223,17 +223,17 @@ function tick(now){
         // Apply the projectile momentum at the contact patch; nearby blocks receive only a small falloff impulse.
         for(const o of allTargetBodies()){
           if(o.removed)continue;const rel=o.m.position.clone().sub(rider.position),dist=rel.length();
-          if(dist<5.25){
-            const fall=Math.pow(Math.max(0,1-dist/5.25),1.05);
+          if(dist<3.15){
+            const fall=Math.pow(Math.max(0,1-dist/3.15),1.25);
             const lateral=rel.clone().sub(hitDir.clone().multiplyScalar(rel.dot(hitDir)));
             const side=lateral.lengthSq()>.001?lateral.normalize():targetR.clone();
             const vertical=Math.max(-.15,Math.min(1.0,rel.y/4.25));
             // Forward punch dominates; nearby blocks fan outward/upward for a readable cascade.
-            const imp=hitDir.clone().multiplyScalar(baseImpulse*(.32+1.08*fall))
-              .addScaledVector(side,baseImpulse*.30*fall)
-              .add(new THREE.Vector3(0,baseImpulse*(.10+.18*Math.max(0,vertical))*fall,0));
+            const imp=hitDir.clone().multiplyScalar(baseImpulse*(.18+.82*fall))
+              .addScaledVector(side,baseImpulse*.08*fall)
+              .add(new THREE.Vector3(0,baseImpulse*.015*Math.max(0,vertical)*fall,0));
             o.body.applyImpulse({x:imp.x,y:imp.y,z:imp.z},true);
-            const torque=new THREE.Vector3(side.z,-side.x*.22,-side.x).multiplyScalar(baseImpulse*.018*fall);
+            const torque=new THREE.Vector3(side.z,-side.x*.22,-side.x).multiplyScalar(baseImpulse*.010*fall);
             o.body.applyTorqueImpulse({x:torque.x,y:torque.y,z:torque.z},true);
           }
         }
