@@ -169,7 +169,7 @@ function tick(now){
       const aim=rider.position.clone().lerp(targetOrigin,THREE.MathUtils.clamp(.32+distToTarget/180,.36,.55));
       camera.lookAt(aim);
       if(!impactDone){for(const b of blocks){const d=rider.position.distanceTo(b.m.position);if(d<1.25){impactDone=true;startRagdoll();score+=100;break}}}
-      let destroyed=0;for(const b of blocks){if(b.active&&(Math.abs(b.m.position.x-targetOrigin.x)>7||b.m.position.y<targetOrigin.y+.2))destroyed++}score+=destroyed;prog.textContent='DESTROY · '+score;
+      let destroyed=0;for(const b of blocks){if(Math.abs(b.m.position.x-b.home.x)>.9||Math.abs(b.m.position.y-b.home.y)>.9||Math.abs(b.m.position.z-b.home.z)>.9)destroyed++}prog.textContent='DESTROY · '+(score+destroyed*25);
       if(impactDone){
         // A successful hit ends the run as a result sequence, not a failure.
         if(ragdoll){const lv=riderBody.linvel(),av=riderBody.angvel(),spd=Math.hypot(lv.x,lv.y,lv.z),aspd=Math.hypot(av.x,av.y,av.z);if(spd<.45&&aspd<.5)finishTimer+=dt;else finishTimer=Math.max(0,finishTimer-dt*.25);}
