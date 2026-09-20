@@ -48,8 +48,8 @@ const blocks=[], blockGeo=new THREE.BoxGeometry(1.45,1.0,1.45), blockMats=[0xffd
 for(let y=0;y<9;y++)for(let x=-4;x<=4;x++){const m=new THREE.Mesh(blockGeo,blockMats[(x+y+8)%blockMats.length]);m.position.copy(targetOrigin).addScaledVector(targetR,x*1.48).add(new THREE.Vector3(0,.52+y*1.02,0));scene.add(m);blocks.push({m,vel:new THREE.Vector3(),spin:new THREE.Vector3(),active:false,hit:false})}
 let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0,riderGrounded=false;
 const riderSpin=new THREE.Vector3();
-function activateBlock(b,imp){if(!b.active)b.active=true;b.vel.add(imp);b.spin.add(new THREE.Vector3((Math.random()-.5)*5,(Math.random()-.5)*5,(Math.random()-.5)*5))}
-function updateBlocks(dt){for(const b of blocks){if(!b.active)continue;b.vel.y-=18*dt;b.m.position.addScaledVector(b.vel,dt);b.m.rotation.x+=b.spin.x*dt;b.m.rotation.y+=b.spin.y*dt;b.m.rotation.z+=b.spin.z*dt;b.vel.multiplyScalar(Math.pow(.992,dt*60));if(b.m.position.y<targetOrigin.y+.52){b.m.position.y=targetOrigin.y+.52;if(b.vel.y<0)b.vel.y*=-.22;b.vel.x*=.82;b.vel.z*=.82}
+function activateBlock(b,imp){if(!b.active)b.active=true;b.vel.add(imp);const m=Math.min(1.35,imp.length()*.055);b.spin.add(new THREE.Vector3((Math.random()-.5)*m,(Math.random()-.5)*m,(Math.random()-.5)*m));b.spin.clampLength(0,1.8)}
+function updateBlocks(dt){for(const b of blocks){if(!b.active)continue;b.vel.y-=18*dt;b.m.position.addScaledVector(b.vel,dt);b.m.rotation.x+=b.spin.x*dt;b.m.rotation.y+=b.spin.y*dt;b.m.rotation.z+=b.spin.z*dt;b.vel.multiplyScalar(Math.pow(.992,dt*60));b.spin.multiplyScalar(Math.pow(.975,dt*60));if(b.m.position.y<targetOrigin.y+.52){b.m.position.y=targetOrigin.y+.52;if(b.vel.y<0)b.vel.y*=-.22;b.vel.x*=.82;b.vel.z*=.82}
   for(const o of blocks){if(o===b||!o.active)continue;const d=b.m.position.distanceTo(o.m.position);if(d<1.38&&d>.001){const n=o.m.position.clone().sub(b.m.position).normalize(),rv=b.vel.clone().sub(o.vel),sep=Math.max(0,rv.dot(n));if(sep>0){const j=n.multiplyScalar(sep*.52);b.vel.sub(j);o.vel.add(j);activateBlock(o,new THREE.Vector3())}}}
 }}
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.65,depthWrite:false});for(let i=0;i<55;i++){let c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*22,10,7),cloudMat);c.scale.y=.25;c.position.set((Math.random()-.5)*650,20+Math.random()*90,-Math.random()*1900);scene.add(c)}
@@ -127,8 +127,17 @@ function tick(now){
       // Airborne body attitude: angular momentum plus steering torque instead of a locked lookAt pose.
       riderSpin.y+=input*1.25*dt;riderSpin.x+=(-launchVel.y*.018-riderSpin.x*.08)*dt;riderSpin.multiplyScalar(Math.pow(.996,dt*60));
       rider.rotateX(riderSpin.x*dt);rider.rotateY(riderSpin.y*dt);rider.rotateZ(riderSpin.z*dt);
-      const groundY=targetOrigin.y+.42;
-      if(rider.position.y<=groundY){rider.position.y=groundY;if(!riderGrounded){riderGrounded=true;launchVel.y=Math.abs(launchVel.y)*.20;riderSpin.x+=launchVel.length()*.055;riderSpin.z+=(Math.random()-.5)*1.3}launchVel.y=Math.max(0,launchVel.y);launchVel.x*=Math.pow(.965,dt*60);launchVel.z*=Math.pow(.965,dt*60);riderSpin.multiplyScalar(Math.pow(.94,dt*60));if(launchVel.length()<.45){launchVel.set(0,0,0);riderSpin.multiplyScalar(.8)}}
+      const groundY=targetOrigin.y+.78;
+      if(rider.position.y<=groundY){
+        rider.position.y=groundY;
+        if(!riderGrounded){riderGrounded=true;const hitVy=Math.min(0,launchVel.y);launchVel.y=Math.min(3.0,-hitVy*.16);riderSpin.x+=Math.min(2.4,launchVel.length()*.07);riderSpin.z+=(Math.random()-.5)*.9}
+        else if(launchVel.y<0)launchVel.y=0;
+        const groundDrag=Math.pow(.93,dt*60);launchVel.x*=groundDrag;launchVel.z*=groundDrag;riderSpin.multiplyScalar(Math.pow(.90,dt*60));
+        // Hard floor constraint: never allow the visual body centre to tunnel below the platform.
+        if(Math.abs(launchVel.y)<.35)launchVel.y=0;
+        if(Math.hypot(launchVel.x,launchVel.z)<.35){launchVel.x=0;launchVel.z=0}
+        if(launchVel.length()<.45&&riderSpin.length()<.35){launchVel.set(0,0,0);riderSpin.set(0,0,0)}
+      }else if(riderGrounded&&launchVel.y>0){riderGrounded=false}
       const toTarget=targetOrigin.clone().sub(rider.position),flightDir=launchVel.lengthSq()>.01?launchVel.clone().normalize():targetOrigin.clone().sub(rider.position).normalize();
       // Continuous launch camera: preserve the slide shot, then smoothly widen to frame rider + target together.
       flightCamBlend=Math.min(1,flightCamBlend+dt/1.15);
@@ -141,7 +150,7 @@ function tick(now){
       camera.up.set(0,1,0);
       const aim=rider.position.clone().lerp(targetOrigin,THREE.MathUtils.clamp(.32+distToTarget/180,.36,.55));
       camera.lookAt(aim);
-      if(!impactDone){for(const b of blocks){const d=rider.position.distanceTo(b.m.position);if(d<1.25){impactDone=true;const impact=launchVel.clone().multiplyScalar(.42);for(const o of blocks){const dist=o.m.position.distanceTo(rider.position);if(dist<4.8){const fall=Math.max(.08,1-dist/4.8),dir=o.m.position.clone().sub(rider.position).normalize();activateBlock(o,dir.multiplyScalar(impact.length()*fall).addScaledVector(impact.clone().normalize(),impact.length()*.32*fall));if(!o.hit){o.hit=true;score+=Math.round(100*fall)}}}launchVel.multiplyScalar(.18);break}}}
+      if(!impactDone){for(const b of blocks){const d=rider.position.distanceTo(b.m.position);if(d<1.25){impactDone=true;const impact=launchVel.clone().multiplyScalar(.42);for(const o of blocks){const dist=o.m.position.distanceTo(rider.position);if(dist<4.8){const fall=Math.max(.08,1-dist/4.8),dir=o.m.position.clone().sub(rider.position).normalize();activateBlock(o,dir.multiplyScalar(impact.length()*fall).addScaledVector(impact.clone().normalize(),impact.length()*.32*fall));if(!o.hit){o.hit=true;score+=Math.round(100*fall)}}}const hitSpeed=launchVel.length();launchVel.multiplyScalar(.32);launchVel.y=Math.max(launchVel.y,2.2);riderSpin.add(new THREE.Vector3(2.4+hitSpeed*.055,(Math.random()-.5)*1.4,(Math.random()-.5)*2.2));riderSpin.clampLength(0,5.2);break}}}
       let destroyed=0;for(const b of blocks){if(b.active&&(Math.abs(b.m.position.x-targetOrigin.x)>7||b.m.position.y<targetOrigin.y+.2))destroyed++}score+=destroyed;prog.textContent='DESTROY · '+score;
       if(impactDone){
         // A successful hit ends the run as a result sequence, not a failure.
