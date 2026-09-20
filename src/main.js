@@ -132,7 +132,7 @@ function removeScoredBlocks(dt){
     }
   }
 }
-let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0,riderGrounded=false,ragdoll=false,resultShown=false,stage2Time=0;
+let stage=1,score=0,launchVel=new THREE.Vector3(),impactDone=false,flightCamBlend=0,finishTimer=0,riderGrounded=false,ragdoll=false,resultShown=false,stage2Time=0,impactTime=0;
 const riderSpin=new THREE.Vector3();
 const riderBody=physics.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0,-500,0).setCanSleep(true).setCcdEnabled(true));
 const riderCollider=physics.createCollider(RAPIER.ColliderDesc.capsule(.72,.38).setDensity(11.0).setFriction(.62).setRestitution(.04),riderBody);
@@ -148,8 +148,8 @@ const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opac
 let s=4,v=26,theta=0,omega=0,input=0,holdTime=0,dead=false,airVel=new THREE.Vector3(),last=performance.now(),checkpoint=4;
 const TEST_STAGE2=true;
 const camState={back:5.15,height:2.35,side:0,lookAhead:72,aheadMix:.18};
-function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.fractured=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
-function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;resultShown=false;stage2Time=0;
+function reset(){s=TEST_STAGE2?total-38:checkpoint;v=TEST_STAGE2?10:26;theta=omega=input=holdTime=0;dead=false;stage=1;score=0;removedScore=0;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;ragdoll=false;resultShown=false;stage2Time=0;impactTime=0;physAcc=0;riderSpin.set(0,0,0);rider.rotation.set(0,0,0);riderBody.setTranslation({x:0,y:-500,z:0},true);riderBody.setLinvel({x:0,y:0,z:0},true);riderBody.setAngvel({x:0,y:0,z:0},true);fail.style.display='none';for(const b of allTargetBodies()){if(b.removed){b.removed=false;scene.add(b.m);const nb=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(b.home.x,b.home.y,b.home.z));physics.createCollider(RAPIER.ColliderDesc.cuboid(b.isSupport?(b.m.geometry.parameters.width/2):.675,b.isSupport?(b.m.geometry.parameters.height/2):.475,b.isSupport?(b.m.geometry.parameters.depth/2):.675).setDensity(b.isSupport?3.2:.22).setFriction(b.isSupport?.72:.42),nb);b.body=nb}b.hit=false;b.scored=false;b.fractured=false;b.groundTime=0;b.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased,true);b.body.setTranslation({x:b.home.x,y:b.home.y,z:b.home.z},true);b.body.setRotation({x:0,y:0,z:0,w:1},true);b.body.setLinvel({x:0,y:0,z:0},true);b.body.setAngvel({x:0,y:0,z:0},true)}}
+function launchStage2(p,t,rr){stage=2;dead=false;impactDone=false;flightCamBlend=0;finishTimer=0;riderGrounded=false;resultShown=false;stage2Time=0;impactTime=0;
   rider.position.copy(p).addScaledVector(t,2.0).add(new THREE.Vector3(0,1.0,0));
   if(TEST_STAGE2){
     // Calibrated destruction-test shot: nominal no-input trajectory intersects the middle of the block wall.
@@ -260,13 +260,14 @@ function tick(now){
       const totalScore=score+removedScore;
       prog.textContent='DESTROY · '+totalScore;
       if(impactDone){
-        // Once the rider has hit the target, finish quickly after landing/settling.
+        impactTime+=dt;
+        // Finish from post-impact time, not total Stage-2 flight time. Residual ragdoll jitter must not keep the run alive.
         // Do not wait for tiny residual angular velocity from the physics body.
         const lv=ragdoll?riderBody.linvel():{x:0,y:0,z:0};
         const spd=Math.hypot(lv.x,lv.y,lv.z);
         const onGround=rider.position.y<=targetOrigin.y+1.35;
-        if(onGround&&spd<1.35)finishTimer+=dt;else finishTimer=0;
-        if((finishTimer>.45||stage2Time>7.0)&&!resultShown){
+        if(onGround&&spd<1.8)finishTimer+=dt;else finishTimer=Math.max(0,finishTimer-dt*.35);
+        if((finishTimer>.40||impactTime>3.25)&&!resultShown){
           // One last cleanup/scoring pass before freezing the result.
           removeScoredBlocks(.5);
           resultShown=true;dead=true;score+=removedScore;removedScore=0;
