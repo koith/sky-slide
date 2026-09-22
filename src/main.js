@@ -30,10 +30,10 @@ jointedLimb(-.23,.55,.42,.42,.13,suit,legs,shins); jointedLimb(.23,.55,.42,.42,.
 scene.add(rider);
 // Water spray: pooled translucent droplets emitted behind the rider while in contact with the slide.
 const sprayGeo=new THREE.SphereGeometry(.075,5,4), sprayMat=new THREE.MeshBasicMaterial({color:0xe8fbff,transparent:true,opacity:.72,depthWrite:false});
-const sprayPool=[]; for(let i=0;i<96;i++){const m=new THREE.Mesh(sprayGeo,sprayMat.clone());m.visible=false;scene.add(m);sprayPool.push({m,life:0,vel:new THREE.Vector3()})}
+const sprayPool=[]; for(let i=0;i<192;i++){const m=new THREE.Mesh(sprayGeo,sprayMat.clone());m.visible=false;scene.add(m);sprayPool.push({m,life:0,vel:new THREE.Vector3()})}
 let sprayCursor=0, sprayAcc=0;
 function emitSpray(p,t,rr,normal,speed,dt){
-  sprayAcc+=dt*(24+speed*1.15);
+  sprayAcc+=dt*(48+speed*2.30);
   while(sprayAcc>=1){sprayAcc-=1;const q=sprayPool[sprayCursor++%sprayPool.length];q.life=.28+Math.random()*.24;q.m.visible=true;
     q.m.position.copy(p).addScaledVector(t,-.55).addScaledVector(rr,(Math.random()-.5)*.65).addScaledVector(normal,.08);
     q.vel.copy(t).multiplyScalar(-1.5-Math.random()*2.2).addScaledVector(rr,(Math.random()-.5)*(2.2+speed*.025)).addScaledVector(normal,1.1+Math.random()*2.4);
