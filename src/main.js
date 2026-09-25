@@ -32,7 +32,7 @@ scene.add(rider);
 // Replace the primitive prototype body with the Quaternius Casual skinned character.
 // Gameplay/physics still use the existing rider root and capsule, so this is a visual-only upgrade.
 let characterMixer=null,characterModel=null,characterBones={},characterBase={};
-function findBone(...keys){let hit=null;characterModel?.traverse(o=>{if(hit||!o.isBone)return;const n=o.name.toLowerCase();if(keys.some(k=>n.includes(k)))hit=o});return hit}
+function findBone(...keys){let hit=null;characterModel?.traverse(o=>{if(hit||!o.isBone)return;const n=o.name.toLowerCase().replace(/[^a-z0-9]/g,'');if(keys.some(k=>n.includes(k.toLowerCase().replace(/[^a-z0-9]/g,''))))hit=o});return hit}
 function bindBone(key,b){if(b){characterBones[key]=b;characterBase[key]=b.rotation.clone()}}
 function poseBone(key,x=0,y=0,z=0){const b=characterBones[key],q=characterBase[key];if(b&&q)b.rotation.set(q.x+x,q.y+y,q.z+z)}
 function updateCharacterPose(){
@@ -42,7 +42,7 @@ function updateCharacterPose(){
     poseBone('spine',-.18+w);poseBone('chest',-.14-w*.5);poseBone('head',.18);
     poseBone('la',-.55,0,-.18);poseBone('ra',-.55,0,.18);poseBone('lf',-.32,0,-.08);poseBone('rf',-.32,0,.08);
     poseBone('lt',.16,0,-.05);poseBone('rt',.16,0,.05);poseBone('ls',-.25);poseBone('rs',-.25);
-  }else if(stage===2&&!dead){
+  }else if(stage===2&&!dead&&!impactDone){
     const a=Math.sin(t*8)*.28,b=Math.sin(t*6.1+1.7)*.22;
     poseBone('spine',-.08,0,a*.1);poseBone('chest',.03,a*.08);poseBone('head',.08,-a*.1);
     poseBone('la',-.35+b,0,-.45-a*.22);poseBone('ra',-.35-b,0,.45+a*.22);poseBone('lf',-.42-a*.22);poseBone('rf',-.42+a*.22);
@@ -61,10 +61,10 @@ new GLTFLoader().load('./models/Casual.gltf',g=>{
   characterModel.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false}});
   rider.add(characterModel);
   bindBone('spine',findBone('spine'));bindBone('chest',findBone('chest'));bindBone('head',findBone('head'));
-  bindBone('la',findBone('leftarm','upperarm_l'));bindBone('ra',findBone('rightarm','upperarm_r'));
-  bindBone('lf',findBone('leftforearm','lowerarm_l'));bindBone('rf',findBone('rightforearm','lowerarm_r'));
-  bindBone('lt',findBone('leftupleg','thigh_l'));bindBone('rt',findBone('rightupleg','thigh_r'));
-  bindBone('ls',findBone('leftleg','calf_l'));bindBone('rs',findBone('rightleg','calf_r'));
+  bindBone('la',findBone('upperarml'));bindBone('ra',findBone('upperarmr'));
+  bindBone('lf',findBone('lowerarml'));bindBone('rf',findBone('lowerarmr'));
+  bindBone('lt',findBone('upperlegl'));bindBone('rt',findBone('upperlegr'));
+  bindBone('ls',findBone('lowerlegl'));bindBone('rs',findBone('lowerlegr'));
 },undefined,e=>console.error('Character model load failed',e));
 // Water spray: pooled translucent droplets emitted behind the rider while in contact with the slide.
 const sprayGeo=new THREE.SphereGeometry(.075,5,4), sprayMat=new THREE.MeshBasicMaterial({color:0xe8fbff,transparent:true,opacity:.72,depthWrite:false});
