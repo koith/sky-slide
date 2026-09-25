@@ -31,32 +31,40 @@ jointedLimb(-.23,.55,.42,.42,.13,suit,legs,shins); jointedLimb(.23,.55,.42,.42,.
 scene.add(rider);
 // Replace the primitive prototype body with the Quaternius Casual skinned character.
 // Gameplay/physics still use the existing rider root and capsule, so this is a visual-only upgrade.
-let characterMixer=null,characterActions={},characterState='';
-function setCharacterState(name,fade=.18){
-  if(!characterMixer||characterState===name)return;
-  const next=characterActions[name];if(!next)return;
-  const prev=characterActions[characterState];
-  next.reset().setEffectiveWeight(1).setEffectiveTimeScale(name==='slide'?.72:name==='air'?.82:1);
-  if(name==='impact'){next.setLoop(THREE.LoopOnce,1);next.clampWhenFinished=true}else next.setLoop(THREE.LoopRepeat,Infinity);
-  if(prev)prev.fadeOut(fade);next.fadeIn(fade).play();characterState=name;
+let characterMixer=null,characterModel=null,characterBones={},characterBase={};
+function findBone(...keys){let hit=null;characterModel?.traverse(o=>{if(hit||!o.isBone)return;const n=o.name.toLowerCase();if(keys.some(k=>n.includes(k)))hit=o});return hit}
+function bindBone(key,b){if(b){characterBones[key]=b;characterBase[key]=b.rotation.clone()}}
+function poseBone(key,x=0,y=0,z=0){const b=characterBones[key],q=characterBase[key];if(b&&q)b.rotation.set(q.x+x,q.y+y,q.z+z)}
+function updateCharacterPose(){
+  if(!characterModel)return;const t=performance.now()*.001;
+  if(stage===1&&!dead){
+    const w=Math.sin(t*6.5)*.035;
+    poseBone('spine',-.18+w);poseBone('chest',-.14-w*.5);poseBone('head',.18);
+    poseBone('la',-.55,0,-.18);poseBone('ra',-.55,0,.18);poseBone('lf',-.32,0,-.08);poseBone('rf',-.32,0,.08);
+    poseBone('lt',.16,0,-.05);poseBone('rt',.16,0,.05);poseBone('ls',-.25);poseBone('rs',-.25);
+  }else if(stage===2&&!dead){
+    const a=Math.sin(t*8)*.28,b=Math.sin(t*6.1+1.7)*.22;
+    poseBone('spine',-.08,0,a*.1);poseBone('chest',.03,a*.08);poseBone('head',.08,-a*.1);
+    poseBone('la',-.35+b,0,-.45-a*.22);poseBone('ra',-.35-b,0,.45+a*.22);poseBone('lf',-.42-a*.22);poseBone('rf',-.42+a*.22);
+    poseBone('lt',.18+a*.15,0,-.08);poseBone('rt',.18-a*.15,0,.08);poseBone('ls',-.32+b*.2);poseBone('rs',-.32-b*.2);
+  }else{
+    const j=Math.sin(t*9)*.14;
+    poseBone('spine',-.12,0,j*.15);poseBone('chest',-.08,j*.12);poseBone('head',.1,-j*.15);
+    poseBone('la',-.48+j,0,-.32);poseBone('ra',-.48-j,0,.32);poseBone('lf',-.46-j*.4);poseBone('rf',-.46+j*.4);
+    poseBone('lt',.22-j*.2,0,-.08);poseBone('rt',.22+j*.2,0,.08);poseBone('ls',-.4+j*.25);poseBone('rs',-.4-j*.25);
+  }
 }
 new GLTFLoader().load('./models/Casual.gltf',g=>{
-  torso.visible=false;head.visible=false;
-  for(const x of [...arms,...legs]) x.visible=false;
-  const model=g.scene;
-  model.name='Quaternius_Casual';
-  model.rotation.x=-Math.PI/2;
-  model.scale.setScalar(.92);
-  model.position.set(0,.18,.18);
-  model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false}});
-  rider.add(model);
-  characterMixer=new THREE.AnimationMixer(model);
-  const clip=n=>THREE.AnimationClip.findByName(g.animations,n);
-  characterActions.slide=characterMixer.clipAction(clip('Run')||clip('Idle_Neutral')||g.animations[0]);
-  characterActions.air=characterMixer.clipAction(clip('Roll')||clip('HitRecieve_2')||g.animations[0]);
-  characterActions.impact=characterMixer.clipAction(clip('Death')||clip('HitRecieve')||g.animations[0]);
-  characterActions.idle=characterMixer.clipAction(clip('Idle_Neutral')||g.animations[0]);
-  setCharacterState('slide',0);
+  torso.visible=false;head.visible=false;for(const x of [...arms,...legs])x.visible=false;
+  characterModel=g.scene;characterModel.name='Quaternius_Casual';characterModel.rotation.x=-Math.PI/2;
+  characterModel.scale.setScalar(.92);characterModel.position.set(0,.18,.18);
+  characterModel.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false}});
+  rider.add(characterModel);
+  bindBone('spine',findBone('spine'));bindBone('chest',findBone('chest'));bindBone('head',findBone('head'));
+  bindBone('la',findBone('leftarm','upperarm_l'));bindBone('ra',findBone('rightarm','upperarm_r'));
+  bindBone('lf',findBone('leftforearm','lowerarm_l'));bindBone('rf',findBone('rightforearm','lowerarm_r'));
+  bindBone('lt',findBone('leftupleg','thigh_l'));bindBone('rt',findBone('rightupleg','thigh_r'));
+  bindBone('ls',findBone('leftleg','calf_l'));bindBone('rs',findBone('rightleg','calf_r'));
 },undefined,e=>console.error('Character model load failed',e));
 // Water spray: pooled translucent droplets emitted behind the rider while in contact with the slide.
 const sprayGeo=new THREE.SphereGeometry(.075,5,4), sprayMat=new THREE.MeshBasicMaterial({color:0xe8fbff,transparent:true,opacity:.72,depthWrite:false});
@@ -347,11 +355,7 @@ function tick(now){
     const fallCam=rider.position.clone().addScaledVector(fallDir,-5.8).add(new THREE.Vector3(0,2.3,0));
     camera.position.lerp(fallCam,1-Math.exp(-5.5*dt)); camera.up.set(0,1,0); camera.lookAt(rider.position);
   }
-  if(characterMixer){
-    const desired=dead?'impact':stage===2?'air':'slide';
-    setCharacterState(desired);
-    characterMixer.update(dt);
-  }
+  updateCharacterPose();
   updateSpray(dt); syncPhysics(dt); syncRiderBody(); updateEffects(dt);
   renderer.render(scene,camera); requestAnimationFrame(tick);
 }
