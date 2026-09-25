@@ -31,7 +31,15 @@ jointedLimb(-.23,.55,.42,.42,.13,suit,legs,shins); jointedLimb(.23,.55,.42,.42,.
 scene.add(rider);
 // Replace the primitive prototype body with the Quaternius Casual skinned character.
 // Gameplay/physics still use the existing rider root and capsule, so this is a visual-only upgrade.
-let characterMixer=null;
+let characterMixer=null,characterActions={},characterState='';
+function setCharacterState(name,fade=.18){
+  if(!characterMixer||characterState===name)return;
+  const next=characterActions[name];if(!next)return;
+  const prev=characterActions[characterState];
+  next.reset().setEffectiveWeight(1).setEffectiveTimeScale(name==='slide'?.72:name==='air'?.82:1);
+  if(name==='impact'){next.setLoop(THREE.LoopOnce,1);next.clampWhenFinished=true}else next.setLoop(THREE.LoopRepeat,Infinity);
+  if(prev)prev.fadeOut(fade);next.fadeIn(fade).play();characterState=name;
+}
 new GLTFLoader().load('./models/Casual.gltf',g=>{
   torso.visible=false;head.visible=false;
   for(const x of [...arms,...legs]) x.visible=false;
@@ -43,8 +51,12 @@ new GLTFLoader().load('./models/Casual.gltf',g=>{
   model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false}});
   rider.add(model);
   characterMixer=new THREE.AnimationMixer(model);
-  const clip=THREE.AnimationClip.findByName(g.animations,'Idle_Neutral')||g.animations[0];
-  if(clip) characterMixer.clipAction(clip).play();
+  const clip=n=>THREE.AnimationClip.findByName(g.animations,n);
+  characterActions.slide=characterMixer.clipAction(clip('Run')||clip('Idle_Neutral')||g.animations[0]);
+  characterActions.air=characterMixer.clipAction(clip('Roll')||clip('HitRecieve_2')||g.animations[0]);
+  characterActions.impact=characterMixer.clipAction(clip('Death')||clip('HitRecieve')||g.animations[0]);
+  characterActions.idle=characterMixer.clipAction(clip('Idle_Neutral')||g.animations[0]);
+  setCharacterState('slide',0);
 },undefined,e=>console.error('Character model load failed',e));
 // Water spray: pooled translucent droplets emitted behind the rider while in contact with the slide.
 const sprayGeo=new THREE.SphereGeometry(.075,5,4), sprayMat=new THREE.MeshBasicMaterial({color:0xe8fbff,transparent:true,opacity:.72,depthWrite:false});
@@ -334,6 +346,11 @@ function tick(now){
     const fallDir=airVel.clone(); if(fallDir.lengthSq()<.01) fallDir.set(0,-1,0); fallDir.normalize();
     const fallCam=rider.position.clone().addScaledVector(fallDir,-5.8).add(new THREE.Vector3(0,2.3,0));
     camera.position.lerp(fallCam,1-Math.exp(-5.5*dt)); camera.up.set(0,1,0); camera.lookAt(rider.position);
+  }
+  if(characterMixer){
+    const desired=dead?'impact':stage===2?'air':'slide';
+    setCharacterState(desired);
+    characterMixer.update(dt);
   }
   updateSpray(dt); syncPhysics(dt); syncRiderBody(); updateEffects(dt);
   renderer.render(scene,camera); requestAnimationFrame(tick);
