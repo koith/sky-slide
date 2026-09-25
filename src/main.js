@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import RAPIER from '@dimforge/rapier3d-compat';
 await RAPIER.init();
 const $=s=>document.querySelector(s), app=$('#app'), prog=$('#progress'), fail=$('#fail');
@@ -28,6 +29,23 @@ function jointedLimb(x,z,upperLen,lowerLen,rad,mat,upperList,lowerList){
 jointedLimb(-.42,-.42,.38,.36,.10,skin,arms,forearms); jointedLimb(.42,-.42,.38,.36,.10,skin,arms,forearms);
 jointedLimb(-.23,.55,.42,.42,.13,suit,legs,shins); jointedLimb(.23,.55,.42,.42,.13,suit,legs,shins);
 scene.add(rider);
+// Replace the primitive prototype body with the Quaternius Casual skinned character.
+// Gameplay/physics still use the existing rider root and capsule, so this is a visual-only upgrade.
+let characterMixer=null;
+new GLTFLoader().load('./models/Casual.gltf',g=>{
+  torso.visible=false;head.visible=false;
+  for(const x of [...arms,...legs]) x.visible=false;
+  const model=g.scene;
+  model.name='Quaternius_Casual';
+  model.rotation.x=-Math.PI/2;
+  model.scale.setScalar(.92);
+  model.position.set(0,.18,.18);
+  model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false}});
+  rider.add(model);
+  characterMixer=new THREE.AnimationMixer(model);
+  const clip=THREE.AnimationClip.findByName(g.animations,'Idle_Neutral')||g.animations[0];
+  if(clip) characterMixer.clipAction(clip).play();
+},undefined,e=>console.error('Character model load failed',e));
 // Water spray: pooled translucent droplets emitted behind the rider while in contact with the slide.
 const sprayGeo=new THREE.SphereGeometry(.075,5,4), sprayMat=new THREE.MeshBasicMaterial({color:0xe8fbff,transparent:true,opacity:.72,depthWrite:false});
 const sprayPool=[]; for(let i=0;i<192;i++){const m=new THREE.Mesh(sprayGeo,sprayMat.clone());m.visible=false;scene.add(m);sprayPool.push({m,life:0,vel:new THREE.Vector3()})}
@@ -182,6 +200,7 @@ function tangent(f){return new THREE.Vector3(Math.sin(f.yaw),f.g,-Math.cos(f.yaw
 function worldPos(f,th){return f.p.clone().addScaledVector(right(f),R*Math.sin(th)).add(new THREE.Vector3(0,R*(1-Math.cos(th))+.42,0))}
 function tick(now){
   const dt=Math.min(.03,(now-last)/1000); last=now;
+  if(characterMixer)characterMixer.update(dt);
   const flap=now*(dead?.016:.0065), amp=dead?1:0.28;
   arms[0].rotation.y=amp*.48*Math.sin(flap); arms[1].rotation.y=-amp*.48*Math.sin(flap+.7);
   arms[0].rotation.z=amp*.32*Math.sin(flap*1.31); arms[1].rotation.z=-amp*.32*Math.sin(flap*1.31+.5);
